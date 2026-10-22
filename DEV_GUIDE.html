@@ -412,9 +412,9 @@
     <div class="options">
       <article class="opt rec">
         <h4><span class="pill decided">Decided</span> A. DHCP reservation, then DNS</h4>
-        <p>The NIC asks the existing DHCP service for an address. After VMware Tools reports that address, Ansible writes the A record. You are not buying a new product.</p>
-        <p>A lease is not a promise. Laptops work this way because they can change address. A server in ServiceNow, and any firewall rule aimed at it, cannot. The version of A that is safe is a <strong>reservation</strong>: the DHCP server is told this MAC always receives this IP, and that reservation is created by an API before or as the VM boots. Plain DHCP, with no reservation, will eventually hand the address to something else.</p>
-        <p>DNS happens after boot, so there is a gap where the VM exists and the name does not. The CI is written only after that gap closes. If the scope is full, the VM boots with no address and the request sits in configuring.</p>
+        <p>The catalogue network name maps to a DHCP scope you already run. Terraform creates the VM powered off and records the MAC. An AAP job reserves that MAC, then a second apply powers the guest on so the NIC receives the reserved address. Ansible writes the A and PTR records after the guest is using it. You are not buying a new product.</p>
+        <p>A lease is not a promise. Laptops work this way because they can change address. A server in ServiceNow, and any firewall rule aimed at it, cannot. The version of A that is safe is a <strong>reservation</strong>: the DHCP server is told this MAC always receives this IP, and that reservation exists before the guest is powered on. A floating lease will eventually be given to something else.</p>
+        <p>DNS happens after boot, so there is a gap where the VM exists and the name does not. The CI is written only when the guest address, the reservation, and DNS are the same value. A full scope, a refused reservation, or a guest that comes up on a different address is <code>address_failed</code>. The portal retries that step and does not clone a second VM.</p>
         <p>Choose A when the network team already has server scopes and an API that can create reservations, and they do not want another IP database.</p>
       </article>
       <article class="opt">
