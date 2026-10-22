@@ -1,0 +1,1648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Infrastructure automation design guide</title>
+<style>
+  :root {
+    --bg: #e9e2d6;
+    --paper: #fbf7f1;
+    --ink: #1b1916;
+    --muted: #5f584e;
+    --line: #ddd3c4;
+    --estate: #0e3b3c;
+    --estate-soft: #e4f1f0;
+    --demo: #3c2a52;
+    --demo-soft: #f3eef7;
+    --rust: #8f3412;
+    --good: #1c6b43;
+    --good-soft: #e7f5ee;
+    --warn: #8a4b08;
+    --warn-soft: #fff5e4;
+    --bad: #8d2b2b;
+    --bad-soft: #fdeeee;
+    --code: #221e1a;
+    --shadow: 0 1px 0 rgba(28, 25, 21, 0.05), 0 16px 40px rgba(70, 50, 20, 0.06);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    color: var(--ink);
+    background:
+      radial-gradient(1200px 400px at 10% -10%, #f6efe4 0%, transparent 50%),
+      var(--bg);
+    font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    font-size: 18px;
+    line-height: 1.55;
+  }
+  header.top {
+    padding: 28px 6vw 18px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(251, 247, 241, 0.92);
+  }
+  .eyebrow {
+    margin: 0 0 8px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-family: "Segoe UI", Helvetica, sans-serif;
+    font-size: 12px;
+    color: var(--rust);
+    font-weight: 650;
+  }
+  h1 {
+    margin: 0 0 8px;
+    font-size: clamp(32px, 4vw, 52px);
+    line-height: 1.05;
+    font-weight: 600;
+    letter-spacing: -0.03em;
+  }
+  .deck { margin: 0; max-width: 78ch; color: var(--muted); }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+    margin-top: 16px;
+    font-family: "Segoe UI", Helvetica, sans-serif;
+    font-size: 13px;
+  }
+  .pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-family: "Segoe UI", Helvetica, sans-serif;
+    font-size: 12px;
+    font-weight: 650;
+    letter-spacing: 0.02em;
+    vertical-align: 1px;
+  }
+  .pill.estate { background: var(--estate); color: #f4fffe; }
+  .pill.demo { background: var(--demo); color: #fbf7ff; }
+  .pill.rec { background: var(--good); color: white; }
+  .pill.open { background: var(--warn-soft); color: var(--warn); border: 1px solid #efd7b0; }
+  nav.tabs {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    padding: 10px 6vw;
+    background: rgba(251, 247, 241, 0.96);
+    border-bottom: 1px solid var(--line);
+    backdrop-filter: blur(8px);
+  }
+  nav.tabs button {
+    appearance: none;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--ink);
+    font-family: "Segoe UI", Helvetica, sans-serif;
+    font-size: 14px;
+    padding: 8px 12px;
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  nav.tabs button[aria-selected="true"] {
+    background: var(--ink);
+    color: var(--paper);
+  }
+  nav.tabs button:focus-visible { outline: 2px solid var(--rust); outline-offset: 2px; }
+  main { padding: 28px 6vw 80px; max-width: 1180px; }
+  h2 { font-size: 32px; letter-spacing: -0.03em; margin: 0 0 12px; }
+  h3 { font-size: 22px; margin: 28px 0 8px; letter-spacing: -0.02em; }
+  h4 { margin: 0 0 6px; font-size: 16px; font-family: "Segoe UI", Helvetica, sans-serif; }
+  p { max-width: 78ch; }
+  a { color: var(--estate); }
+  .panel[hidden] { display: none; }
+  .grid { display: grid; gap: 14px; }
+  .grid.two { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .grid.three { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+  .card, .opt, .callout, .q, details.phase {
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+  }
+  .card, .callout { padding: 16px 18px; }
+  .q { padding: 16px 18px 8px; margin: 14px 0; }
+  .opt { padding: 12px 14px; }
+  .opt.rec { border-color: #b7d8c8; background: linear-gradient(180deg, var(--good-soft), var(--paper) 48px); }
+  .options { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin: 10px 0; }
+  .callout { margin: 14px 0; }
+  .callout.warn { background: var(--warn-soft); border-color: #efd7b0; }
+  .callout.bad { background: var(--bad-soft); border-color: #f0c8c8; }
+  .callout.good { background: var(--good-soft); border-color: #b7d8c8; }
+  .callout.estate { background: var(--estate-soft); border-color: #c5dedc; }
+  .callout.demo { background: var(--demo-soft); border-color: #ddd0ea; }
+  .callout strong.k { font-family: "Segoe UI", Helvetica, sans-serif; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; display: block; margin-bottom: 4px; }
+  ul, ol { max-width: 78ch; padding-left: 1.2em; }
+  li { margin: 4px 0; }
+  table { width: 100%; border-collapse: collapse; background: var(--paper); border-radius: 12px; overflow: hidden; font-family: "Segoe UI", Helvetica, sans-serif; font-size: 14px; margin: 12px 0 18px; }
+  th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  th { background: #f3ece3; font-weight: 650; }
+  code, pre { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; }
+  code { font-size: 0.86em; background: #f3ece3; padding: 0.1em 0.35em; border-radius: 5px; }
+  pre {
+    background: var(--code);
+    color: #f6f1e8;
+    padding: 14px 16px;
+    border-radius: 12px;
+    overflow: auto;
+    font-size: 13px;
+    line-height: 1.45;
+    max-width: 100%;
+  }
+  pre code { background: transparent; color: inherit; padding: 0; }
+  .src { font-family: "Segoe UI", Helvetica, sans-serif; font-size: 13px; color: var(--muted); }
+  details.phase { padding: 4px 16px 8px; margin: 10px 0; }
+  details.phase summary { cursor: pointer; font-weight: 650; padding: 10px 0; }
+  .flow {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin: 14px 0 18px;
+  }
+  .lane {
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 10px;
+    min-height: 100%;
+  }
+  .lane h3 { margin: 0 0 8px; font-size: 14px; font-family: "Segoe UI", Helvetica, sans-serif; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  .node {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 8px 10px;
+    margin: 8px 0;
+    background: #fff;
+    font-family: "Segoe UI", Helvetica, sans-serif;
+    font-size: 14px;
+  }
+  .node small { display: block; color: var(--muted); font-size: 12px; }
+  .node.estate { border-color: #9fc9c6; }
+  .node.demo { border-color: #cbb8dc; }
+  .arrow { text-align: center; color: var(--muted); font-family: "Segoe UI", Helvetica, sans-serif; font-size: 12px; margin: 0; }
+  svg.diagram { width: 100%; height: auto; background: var(--paper); border: 1px solid var(--line); border-radius: 16px; margin: 10px 0 16px; }
+  .toc a { font-family: "Segoe UI", Helvetica, sans-serif; font-size: 14px; }
+  .footer {
+    padding: 20px 6vw 40px;
+    color: var(--muted);
+    font-family: "Segoe UI", Helvetica, sans-serif;
+    font-size: 13px;
+    border-top: 1px solid var(--line);
+  }
+  @media (max-width: 900px) {
+    .flow { grid-template-columns: 1fr 1fr; }
+    body { font-size: 17px; }
+  }
+  @media (max-width: 640px) {
+    .flow { grid-template-columns: 1fr; }
+    header.top, nav.tabs, main { padding-left: 16px; padding-right: 16px; }
+  }
+  @media print {
+    nav.tabs { display: none; }
+    .panel[hidden] { display: block !important; }
+    .panel { break-before: page; }
+    body { background: white; }
+    header.top { position: static; }
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <p class="eyebrow">Design only · 22 October 2026 · Europe/London · Nothing in this file is deployed</p>
+  <h1>Internal infrastructure automation</h1>
+  <p class="deck">A design for provisioning and configuring machines with HCP Terraform agents and Red Hat’s managed Ansible Automation Platform, fronted by an Entra-authenticated portal. One guide, two profiles: the company estate on vSphere, and a personal Azure showcase you can later demonstrate to clients.</p>
+  <div class="legend">
+    <span><span class="pill estate">Estate</span> on-prem VMware, private GitHub Enterprise, CyberArk, Splunk Enterprise, self-hosted workers</span>
+    <span><span class="pill demo">Showcase</span> your Azure subscription, your Entra tenant, your HCP Terraform org, Azure VMs</span>
+  </div>
+</header>
+<nav class="tabs" role="tablist" aria-label="Guide sections">
+  <button role="tab" aria-selected="true" aria-controls="overview" id="tab-overview" tabindex="0">Overview</button>
+  <button role="tab" aria-selected="false" aria-controls="questions" id="tab-questions" tabindex="-1">Questions</button>
+  <button role="tab" aria-selected="false" aria-controls="enterprise" id="tab-enterprise" tabindex="-1">Estate design</button>
+  <button role="tab" aria-selected="false" aria-controls="demo" id="tab-demo" tabindex="-1">Showcase</button>
+  <button role="tab" aria-selected="false" aria-controls="agents" id="tab-agents" tabindex="-1">Agents together</button>
+  <button role="tab" aria-selected="false" aria-controls="access" id="tab-access" tabindex="-1">Identity and Splunk</button>
+  <button role="tab" aria-selected="false" aria-controls="runbook" id="tab-runbook" tabindex="-1">Runbook</button>
+  <button role="tab" aria-selected="false" aria-controls="iac" id="tab-iac" tabindex="-1">IaC blueprint</button>
+  <button role="tab" aria-selected="false" aria-controls="risks" id="tab-risks" tabindex="-1">Risks</button>
+</nav>
+<main>
+<section class="panel" role="tabpanel" id="overview" aria-labelledby="tab-overview">
+  <h2>Overview</h2>
+  <p>This is a planning document. It does not create an HCP Terraform organisation, an Azure resource, an agent, or application code. The snippets in the IaC blueprint are the shape of a later build, so the design can be reviewed before anyone writes the system.</p>
+  <div class="callout good">
+    <strong class="k">Recommendation in one paragraph</strong>
+    Keep Terraform responsible for the machine and Ansible responsible for what is inside it. Put a thin portal in front of both, and make every integration leave your network as an outbound connection. On the estate, HCP Terraform agents talk to vCenter, and separate AAP execution nodes talk to the guest OS. On the showcase, the same portal runs on Azure and creates Azure VMs, with a small pull-based runner standing in for AAP until you point it at a real controller.
+  </div>
+
+  <h3>What already exists, and what you would be building</h3>
+  <p>You do not have to invent a developer portal to get a form in front of Terraform. You do have to build one if the thing you want to keep, and later show to clients, is yours.</p>
+  <div class="options">
+    <article class="opt rec">
+      <h4><span class="pill rec">Build</span> Thin custom portal</h4>
+      <p>A small Python service: catalogue, quota, approval, status. It calls HCP Terraform and AAP. This is the showcase product. The estate can run the same code with a different profile.</p>
+    </article>
+    <article class="opt">
+      <h4>HCP Waypoint</h4>
+      <p>HashiCorp’s internal developer platform. Templates wrap no-code Terraform modules. Actions can call HTTP endpoints, including an AAP job, and agent-backed actions can reach a private network. It is included with the commercial HCP story and it is not your product to take to another client.</p>
+    </article>
+    <article class="opt">
+      <h4>ServiceNow or Jira as the front door</h4>
+      <p>Right when the company already lives in an ITSM queue. The portal, or a small worker, becomes the fulfilment engine behind a catalog item. Weak as a personal showcase.</p>
+    </article>
+    <article class="opt">
+      <h4>Backstage</h4>
+      <p>A general internal developer platform. Worth it when you are publishing many software templates, not when the first outcome is a VM. Heavy for this scope.</p>
+    </article>
+    <article class="opt">
+      <h4>VMware Aria Automation</h4>
+      <p>Native vSphere self-service. You have already chosen Terraform as the provisioning standard, including the future Azure landing zone. A second orchestrator for the same VMs splits the operating model.</p>
+    </article>
+  </div>
+  <p>Use the custom portal. Keep modules no-code-ready so a later Waypoint spike is possible without rewriting them. If the company already mandates ServiceNow for production changes, ServiceNow should open the request and the portal should fulfil it. That is a question further down, and it changes the approval screen, not the agent design.</p>
+
+  <h3>The two profiles share a contract</h3>
+  <p>One codebase, two deployment profiles. A catalogue item is the contract. It names a pinned Terraform module, an HCP project, an agent pool (or remote execution), a size menu, a quota, an approval rule, and a configuration job. The estate catalogue points at a vSphere module and an AAP workflow. The showcase catalogue points at an Azure module and a pull runner. Neither module tries to pretend vSphere and Azure are the same resource.</p>
+  <table>
+    <thead><tr><th></th><th>Estate</th><th>Showcase</th></tr></thead>
+    <tbody>
+      <tr><td>Where VMs live</td><td>On-prem vCenter, approved templates</td><td>Azure, one workload resource group, no public IP</td></tr>
+      <tr><td>Terraform execution</td><td>Self-hosted agents, because vCenter is private</td><td>HCP remote execution by default. Optional agent VM to demonstrate the estate pattern</td></tr>
+      <tr><td>Azure authentication</td><td>Later, when private endpoints exist</td><td>Workload identity federation from HCP to Entra. No client secret in Terraform</td></tr>
+      <tr><td>vCenter authentication</td><td>CyberArk, injected on the agent host</td><td>Not in this profile</td></tr>
+      <tr><td>Configuration</td><td>AAP execution nodes, pull mesh to Red Hat-hosted hop nodes</td><td>A VM in the workload VNet that polls the portal and runs Ansible. Swap for AAP by config</td></tr>
+      <tr><td>Human login</td><td>Entra ID, then each product’s own SAML trust</td><td>Your Entra tenant, same OIDC code path</td></tr>
+      <tr><td>Secrets</td><td>CyberArk CCP or Conjur</td><td>Azure Key Vault, behind the same secret-provider interface</td></tr>
+      <tr><td>Audit archive</td><td>Splunk Enterprise via an internal puller</td><td>Same JSON events into Postgres, optionally forwarded to a Splunk HEC you control</td></tr>
+      <tr><td>HCP edition to plan for</td><td>Premium</td><td>Free to start. Standard or Premium only when you want the paid controls in the demo</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Working assumptions</h3>
+  <p>The design is concrete so it can be reviewed. Each assumption is reversible. The questions tab records the options and what would change.</p>
+  <table>
+    <thead><tr><th>Id</th><th>Assumption</th></tr></thead>
+    <tbody>
+      <tr><td>A1</td><td>The estate organisation is created in the region you intend to keep and is Premium. The showcase organisation is a different HCP organisation on Free.</td></tr>
+      <tr><td>A2</td><td>GitHub Enterprise Server is not published to the internet. Private VCS uses a dedicated HCP agent pool that is not allowed to plan or apply.</td></tr>
+      <tr><td>A3</td><td>One workspace per VM. Module version is pinned. A module upgrade is an explicit action, not a floating branch.</td></tr>
+      <tr><td>A4</td><td>The portal is the workflow. Terraform does not launch Ansible. A failed baseline is retried without a second VM.</td></tr>
+      <tr><td>A5</td><td>AAP uses the pull mesh on TCP 443 to the two Red Hat-hosted hop nodes. Execution nodes and Terraform agents are different machines.</td></tr>
+      <tr><td>A6</td><td>Entra authenticates people. Automation uses its own credentials. The portal deep-links into other tools; it does not impersonate the user there.</td></tr>
+      <tr><td>A7</td><td>vCenter passwords are injected on the apply agents from CyberArk. They are not HCP workspace variables.</td></tr>
+      <tr><td>A8</td><td>One internal collector pulls HCP audit trails into Splunk and updates portal status. Run logs are archived separately, redacted, and state files are not sent to Splunk.</td></tr>
+      <tr><td>A9</td><td>Version 1 of the catalogue is a Linux VM from an approved template. Windows, OpenShift, and Azure on the estate are designed as later catalogue items.</td></tr>
+      <tr><td>A10</td><td>Non-production inside quota can be applied by a portal team token after policy. Production apply is pressed by a person in HCP, signed in with Entra, so the audit event names them.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Build order, once you leave this design</h3>
+  <ol>
+    <li>Settle the questions that change purchasing: region, edition, GitHub reachability, ITSM, CyberArk product, Splunk topology, TLS inspection.</li>
+    <li>Build the showcase on Free. Prove Entra login, one Azure VM, destroy, and the audit event.</li>
+    <li>Add the optional HCP agent and the pull runner so the demo tells the estate story honestly.</li>
+    <li>Only then execute the estate runbook, in a vCenter sandbox folder, with company subscriptions you do not have on this personal project.</li>
+  </ol>
+
+  <h3>Which model should do the later build</h3>
+  <p>Use different models for different kinds of work. If you want a single lead for the whole build, use Claude Opus with a high reasoning setting. The risky parts are Entra, workload identity, HCP token types, and the boundary between Terraform and Ansible. Those are long constraints, and a small mistake is a working demo that teaches the wrong pattern.</p>
+  <ul>
+    <li><strong>Design and challenge of this guide.</strong> A reasoning model. This pass is Grok 4.7. A second read by Claude Opus or GPT, using this file as the spec, is worth doing before you write code.</li>
+    <li><strong>Portal, Terraform orchestration, Entra, log shipping.</strong> Claude Opus, high or extra-high reasoning, with this HTML as the spec it is not allowed to quietly redesign.</li>
+    <li><strong>Repeated module boilerplate after the first module is accepted.</strong> Composer is the better fit. Review the diff against the catalogue contract.</li>
+  </ul>
+  <p>Grok 4.7 is a strong fit for the architecture work in this file. I would not hand the later security-sensitive build to a fast code model alone.</p>
+
+  <h3>Glossary</h3>
+  <table>
+    <thead><tr><th>Term</th><th>Meaning in this design</th></tr></thead>
+    <tbody>
+      <tr><td>HCP Terraform agent</td><td>A small process on your machine that polls HCP Terraform and runs <code>terraform plan</code> and <code>apply</code> where your private APIs are reachable.</td></tr>
+      <tr><td>Agent pool</td><td>A named group of those agents. A workspace runs on one pool. Pools are how you separate production credentials from non-production.</td></tr>
+      <tr><td>Request-forwarding agent</td><td>An agent that lets HCP reach a private GitHub Enterprise. It must not also run Terraform applies.</td></tr>
+      <tr><td>AAP execution node</td><td>A RHEL machine in your network that runs playbooks. In the managed service it pulls work from Red Hat-hosted hop nodes.</td></tr>
+      <tr><td>Hop node</td><td>A mesh router. The managed service includes two. Hop nodes do not run your playbooks.</td></tr>
+      <tr><td>Catalogue item</td><td>The only thing a developer can request. It binds a module version, a size menu, a pool, a network list, and a configuration job.</td></tr>
+      <tr><td>request_id</td><td>The correlation key copied into HCP tags, Terraform outputs, AAP extra vars, portal rows, and Splunk.</td></tr>
+      <tr><td>Managed resource</td><td>What HCP bills. A resource in state with mode managed. Data sources, <code>terraform_data</code>, and <code>null_resource</code> do not count. Workspaces themselves are not the bill.</td></tr>
+    </tbody>
+  </table>
+  <p class="src">Product facts in this guide were checked against HashiCorp and Red Hat documentation on 22 October 2026. Editions and prices change. Recheck the plan comparison and the AAP service definition on the day you buy.</p>
+</section>
+
+<section class="panel" role="tabpanel" id="questions" aria-labelledby="tab-questions" hidden>
+  <h2>Questions</h2>
+  <p>These are the decisions that change the design. Under each one is a working assumption you can overturn. A short reply, by question number, is enough.</p>
+
+  <article class="q" id="q1">
+    <h3>1. Where does the HCP Terraform organisation live, and which edition is the estate buying?</h3>
+    <p>Region is chosen at creation. An organisation on <code>app.terraform.io</code> and one on <code>app.eu.terraform.io</code> are different regions. Europe billing is a sales conversation, and feature parity should be confirmed on the Europe plan you are offered. Audit trails, as published in the plan limits, are a Premium feature. Private GitHub Enterprise through an agent is also documented as Premium.</p>
+    <div class="options">
+      <article class="opt rec"><h4><span class="pill rec">Assume</span> A. Premium, region chosen for data residency</h4><p>Needed for private VCS and for the audit API the Splunk archive depends on. Confirm Europe if the estate data must stay in the EU.</p></article>
+      <article class="opt"><h4>B. Standard, and keep GitHub reachable by allowlist</h4><p>Published limits give Standard 10 concurrent agent runs and policy, and they do not give audit logging or private VCS. Enough for throughput of a few dozen builds a day. Not enough for the audit requirement as documented.</p></article>
+      <article class="opt"><h4>C. Free or Essentials for the estate</h4><p>A pilot only. Free stops at 500 managed resources and 1 concurrent agent run. Essentials raises remote concurrency and still, on the published table, has a single concurrent agent run.</p></article>
+    </div>
+    <p><strong>Working assumption A1.</strong> Estate Premium. Showcase Free, in your own organisation, until you want the demo to include audit trails.</p>
+  </article>
+
+  <article class="q" id="q2">
+    <h3>2. Can HCP Terraform and the AAP control plane reach GitHub Enterprise?</h3>
+    <p>Both SaaS control planes clone Git themselves unless you give them another path. The agent does not automatically solve this. Private VCS is a separate agent feature, and it is documented for Premium. AAP project updates run on the managed control plane, so a private GitHub is also an AAP problem, not only a Terraform problem.</p>
+    <div class="options">
+      <article class="opt rec"><h4><span class="pill rec">Assume</span> A. GitHub Enterprise stays private</h4><p>Terraform: a dedicated request-forwarding agent pool, accept ingress only. Ansible: publish collections outbound to the managed Automation Hub from a self-hosted runner. No inbound path to GitHub.</p></article>
+      <article class="opt"><h4>B. Allowlist vendor egress IPs to GitHub Enterprise on 443</h4><p>Native VCS speculative plans and native AAP projects. Security has to accept HashiCorp and Red Hat source addresses. Drops the private-VCS reason for Premium, not the audit reason.</p></article>
+      <article class="opt"><h4>C. Mirror public-safe repos to GitHub.com</h4><p>Works with the showcase pattern. Requires a hard rule that those repos contain no secrets, no internal hostnames you care about, and no unpublished code.</p></article>
+      <article class="opt"><h4>D. API-driven uploads only</h4><p>A runner tars configuration and uploads a configuration version. Works without private VCS. You lose native pull-request plans unless CI does them.</p></article>
+    </div>
+  </article>
+
+  <article class="q" id="q3">
+    <h3>3. What is the system of record for a request and an approval?</h3>
+    <div class="options">
+      <article class="opt rec"><h4><span class="pill rec">Assume</span> A. The portal, with production apply confirmed in HCP</h4><p>Portal stores the request. Non-production apply uses a team token. Production apply is a human in the HCP UI so the Premium audit event names a person.</p></article>
+      <article class="opt"><h4>B. ServiceNow is the record, portal fulfils</h4><p>Choose this if production change already has a CAB queue. Do not build a second CAB.</p></article>
+      <article class="opt"><h4>C. A GitHub pull request is the approval</h4><p>Excellent audit, familiar review, awkward for a developer who should not read Terraform. Fits platform changes better than a VM catalogue.</p></article>
+      <article class="opt"><h4>D. HCP Waypoint, no custom portal</h4><p>Fast for the estate, and it is not a product you can take to another client. Weak when approval has to be a named manager with a cost centre check.</p></article>
+    </div>
+  </article>
+
+  <article class="q" id="q4">
+    <h3>4. Who is allowed to approve, and what is automatic?</h3>
+    <div class="options">
+      <article class="opt rec"><h4><span class="pill rec">Assume</span> A. Quota auto-approves non-production. Production needs a different person</h4><p>Requester and approver cannot be the same account. Policy can still reject an approved request. Approval expires after five business days.</p></article>
+      <article class="opt"><h4>B. Every request waits for the platform team</h4><p>Safest start, and it will not feel like self-service past the first dozen users.</p></article>
+      <article class="opt"><h4>C. Manager approval from Entra, plus platform for production</h4><p>Needs a reliable manager attribute in Entra. Best enterprise fit if that attribute is clean. Say if it is.</p></article>
+      <article class="opt"><h4>D. Change window plus CAB for production</h4><p>Only if an ITSM tool already owns the window calendar.</p></article>
+    </div>
+  </article>
+
+  <article class="q" id="q5">
+    <h3>5. How big is one Terraform state?</h3>
+    <div class="options">
+      <article class="opt rec"><h4><span class="pill rec">Assume</span> A. One workspace per VM</h4><p>Destroy and blast radius stay on one machine. HCP does not cap workspace count. The 30 requests/minute API limit means you must not scan every workspace to learn status.</p></article>
+      <article class="opt"><h4>B. One workspace per application stack</h4><p>Right when a request is always “app plus database plus disks” and they share a lifecycle. Wrong when people request single VMs.</p></article>
+      <article class="opt"><h4>C. One workspace per team per environment, with for_each</h4><p>Fewer workspaces. A bad plan can touch every VM the team owns. Rejected for version 1.</p></article>
+      <article class="opt"><h4>D. Stacks, many deployments of one component</h4><p>HashiCorp’s scale model. Revisit after the portal is boring. Version 1 stays on workspaces because the API and the agent behaviour are the thing you need to learn first.</p></article>
+    </div>
+  </article>
+
+  <article class="q" id="q6">
+    <h3>6. Where do IP addresses and DNS records come from?</h3>
+    <div class="options">
+      <article class="opt"><h4>A. DHCP, DNS written after boot</h4><p>Ansible creates the A record once the guest has an address. Simplest non-production path.</p></article>
+      <article class="opt"><h4>B. Infoblox or BlueCat</h4><p>Terraform reserves the address before create. Use this if the estate already has IPAM and a supported provider.</p></article>
+      <article class="opt"><h4>C. NetBox or phpIPAM</h4><p>Same shape as B, with a lighter product. Reasonable if nothing else exists.</p></article>
+      <article class="opt rec"><h4><span class="pill rec">Assume</span> D. DHCP for version 1, IPAM as a catalogue hook</h4><p>The catalogue item has a field for the address source. Version 1 only implements DHCP plus an Ansible DNS role against AD DNS. Tell me if production forbids DHCP.</p></article>
+    </div>
+  </article>
+
+  <article class="q" id="q7">
+    <h3>7. What does “login to the VM” mean on day one?</h3>
+    <div class="options">
+      <article class="opt rec"><h4><span class="pill rec">Assume</span> A. Linux SSH, AD integration where the estate already has it, Windows later</h4><p>Baseline role joins the domain when the catalogue item says so. Local break-glass account is a CyberArk-managed secret, not a password in the template.</p></article>
+      <article class="opt"><h4>B. Windows and Linux in the first release</h4><p>Doubles the lab: WinRM 5986, sysprep, a second template, a second baseline. Choose this only if the first real consumers are Windows teams.</p></article>
+      <article class="opt"><h4>C. Entra join from day one</h4><p>Natural on the showcase Azure VMs as a later lesson. Unnatural for on-prem vSphere guests until the estate has that pattern.</p></article>
+    </div>
+  </article>
+
+  <article class="q" id="q8">
+    <h3>8. Which CyberArk interface should automation use?</h3>
+    <div class="options">
+      <article class="opt rec"><h4><span class="pill rec">Assume</span> A. Central Credential Provider (AIM/CCP) over HTTPS with an app identity certificate</h4><p>Matches AAP’s credential plugin and a small wrapper on the Terraform agent. Certificate per pool, safe per environment.</p></article>
+      <article class="opt"><h4>B. Conjur / Secrets Manager, machine identity</h4><p>Cleaner if Conjur is already the strategic store. Terraform has a Conjur provider. AAP has a Conjur lookup. Prefer B if both exist and Conjur is the one being invested in.</p></article>
+      <article class="opt"><h4>C. Privilege Cloud</h4><p>Same consumption patterns as A, different hostname and tenancy. The design does not change; the endpoint does.</p></article>
+      <article class="opt"><h4>D. HCP variable sets as the secret store</h4><p>Rejected for vCenter. It puts the most powerful password in the SaaS that does not need to hold it. Acceptable for non-network secrets only as a temporary lab shortcut.</p></article>
+    </div>
+  </article>
+
+  <article class="q" id="q9">
+    <h3>9. What is the Splunk topology?</h3>
+    <div class="options">
+      <article class="opt rec"><h4><span class="pill rec">Assume</span> A. Clustered Splunk Enterprise, HEC reachable from an internal collector VLAN</h4><p>HashiCorp’s Splunk app is documented as unsupported on a clustered Splunk Enterprise deployment. The design uses our own puller into HEC. Indexes: <code>hcp_audit</code>, <code>hcp_runs</code>, <code>aap_audit</code>, <code>portal_audit</code>.</p></article>
+      <article class="opt"><h4>B. Splunk Cloud</h4><p>The official app can pull audit events if the Splunk side can reach <code>app.terraform.io</code>. HCP’s own log-streaming feature, which pushes to a HEC, is a different product path and its docs reject some Splunk Cloud HEC types, including free-trial endpoints and custom firewalls.</p></article>
+      <article class="opt"><h4>C. Non-clustered lab indexer</h4><p>You may use the official app. Still keep the run-log puller, because the app takes audit events, not plan and apply stdout.</p></article>
+    </div>
+  </article>
+
+  <article class="q" id="q10">
+    <h3>10. Does a CMDB have to be updated for the VM to count as done?</h3>
+    <div class="options">
+      <article class="opt"><h4>A. ServiceNow CMDB</h4><p>Add a step after the baseline. The portal already has the attributes a CI record needs.</p></article>
+      <article class="opt"><h4>B. NetBox</h4><p>Natural if NetBox is also the IPAM answer.</p></article>
+      <article class="opt rec"><h4><span class="pill rec">Assume</span> C. Portal inventory is enough for version 1</h4><p>A webhook slot exists. No CMDB is in the critical path until you name one.</p></article>
+    </div>
+  </article>
+
+  <article class="q" id="q11">
+    <h3>11. Where does the estate portal run?</h3>
+    <div class="options">
+      <article class="opt rec"><h4><span class="pill rec">Assume</span> A. Two Linux VMs behind an internal load balancer, PostgreSQL beside them</h4><p>OpenShift is stage 2, so the portal should not wait for it. Do not place the portal on a cluster it is later expected to manage.</p></article>
+      <article class="opt"><h4>B. An existing Kubernetes cluster that is in scope and supported</h4><p>Fine if platform engineering already runs one and it is not the OpenShift you are postponing.</p></article>
+      <article class="opt"><h4>C. Azure App Service now, talking back to on-prem agents</h4><p>This is the showcase hosting model. For the estate it puts the workflow engine in Azure before the landing zone is real, and it makes the private path harder.</p></article>
+    </div>
+  </article>
+
+  <article class="q" id="q12">
+    <h3>12. Does egress TLS inspection sit on the path to HashiCorp and Red Hat?</h3>
+    <div class="options">
+      <article class="opt rec"><h4><span class="pill rec">Assume</span> A. Dedicated egress for agents and execution nodes, no TLS intercept</h4><p>AAP’s pull mesh is mTLS. A proxy that terminates TLS breaks it. HashiCorp’s agent will tolerate an explicit HTTP proxy more readily than the mesh will. Treat inspection bypass as a build blocker, not a tuning item.</p></article>
+      <article class="opt"><h4>B. Everything must use the corporate proxy, and the proxy inspects TLS</h4><p>The AAP pull model as documented will fail. You would be in the push model, with inbound ports, or you need Red Hat to confirm a supported path. Redesign the network section before building.</p></article>
+    </div>
+  </article>
+
+  <article class="q" id="q13">
+    <h3>13. Are there regulated zones that need their own pools?</h3>
+    <div class="options">
+      <article class="opt rec"><h4><span class="pill rec">Assume</span> A. Three zones: non-production, production, and a reserved name for a regulated zone</h4><p>Version 1 builds non-production and production pools. A PCI or similar zone gets its own agent pool, execution instance group, CyberArk safe, and catalogue items when you confirm it exists.</p></article>
+      <article class="opt"><h4>B. One flat server network</h4><p>Fewer moving parts, and a non-production agent that holds production vCenter rights. Rejected.</p></article>
+    </div>
+  </article>
+
+  <article class="q" id="q14">
+    <h3>14. Who owns the VM template, and how often does it change?</h3>
+    <div class="options">
+      <article class="opt rec"><h4><span class="pill rec">Assume</span> A. A separate image process already produces approved vSphere templates</h4><p>The catalogue references a template name. Terraform clones it. This project does not become the image factory in version 1.</p></article>
+      <article class="opt"><h4>B. This project should build images with Packer</h4><p>Add it as a later pipeline. Packer can run on the same agent network, in its own pool, so image builds do not share the vCenter role used for everyday clones.</p></article>
+    </div>
+  </article>
+
+  <article class="q" id="q15">
+    <h3>15. Which day-2 actions are in version 1?</h3>
+    <div class="options">
+      <article class="opt rec"><h4><span class="pill rec">Assume</span> A. Create, show status, add a pre-sized data disk, and decommission</h4><p>Disk and CPU changes are Terraform. Package and account changes are Ansible. Power on/off can wait. Snapshot policy is a tag the backup product already understands, not a workflow we invent.</p></article>
+      <article class="opt"><h4>B. Full lifecycle: resize, snapshot, user add, patch now, restore</h4><p>A second project. The portal’s action list can grow without changing the agent model.</p></article>
+    </div>
+  </article>
+
+  <article class="q" id="q16">
+    <h3>16. For the personal showcase, how real does Ansible Automation Platform need to be?</h3>
+    <div class="options">
+      <article class="opt rec"><h4><span class="pill rec">Assume</span> A. A pull runner that implements the same job states, and a config switch for a real AAP API</h4><p>You can demo the pattern without a Red Hat subscription. You must not tell a client the runner is AAP.</p></article>
+      <article class="opt"><h4>B. Buy a personal AAP managed subscription and attach one execution node in Azure</h4><p>The most honest demo of the mesh, and a real cost. Do this when a client conversation depends on seeing the Red Hat UI.</p></article>
+      <article class="opt"><h4>C. Skip configuration in the demo</h4><p>You would be showing half the design. Rejected.</p></article>
+    </div>
+  </article>
+
+  <article class="q" id="q17">
+    <h3>17. Which Entra tenant is the showcase allowed to use?</h3>
+    <div class="options">
+      <article class="opt rec"><h4><span class="pill rec">Assume</span> A. A tenant you control that contains no company users or company applications</h4><p>A dedicated demo tenant is cleaner when you show it to clients. Your personal Azure directory is acceptable if it is truly personal.</p></article>
+      <article class="opt"><h4>B. The company tenant</h4><p>Out of scope for this project. You said this work is not from the company account.</p></article>
+    </div>
+  </article>
+
+  <div class="callout warn">
+    <strong class="k">What I need back from you</strong>
+    Reply with the question numbers you want to overturn. For example: “2B, 3B, 6B Infoblox, 7B, 8B, 11B”. Everything else stays on the working assumption. The estate runbook is written to assumption A unless you change it.
+  </div>
+</section>
+
+<section class="panel" role="tabpanel" id="enterprise" aria-labelledby="tab-enterprise" hidden>
+  <h2>Estate design</h2>
+  <p><span class="pill estate">Estate</span> Developers request a catalogue item. The portal records the person from Entra, applies quota, and either auto-approves or waits. Terraform, running on an on-prem agent, clones an approved vSphere template. Ansible, running on an on-prem execution node, baselines the guest. Splunk keeps the audit trail after HCP’s 14-day retention.</p>
+
+  <h3>Request path</h3>
+  <div class="flow" aria-label="Estate request path">
+    <div class="lane">
+      <h3>People</h3>
+      <div class="node estate">Developer<small>Entra app role Requester</small></div>
+      <div class="node estate">Approver<small>Different person. Prod only by default</small></div>
+      <div class="node estate">Platform<small>Modules, pools, catalogue</small></div>
+    </div>
+    <div class="lane">
+      <h3>Your network</h3>
+      <div class="node estate">Portal<small>OIDC, PostgreSQL, outbound APIs</small></div>
+      <div class="node estate">Apply agents<small>vCenter and CyberArk</small></div>
+      <div class="node estate">Ingress agents<small>GitHub Enterprise only</small></div>
+      <div class="node estate">AAP execution nodes<small>SSH or WinRM to guests</small></div>
+      <div class="node estate">Collector<small>Audit API to Splunk HEC</small></div>
+    </div>
+    <div class="lane">
+      <h3>SaaS control planes</h3>
+      <div class="node">HCP Terraform<small>State, policy, runs, audit</small></div>
+      <div class="node">AAP on AWS<small>Red Hat operates this</small></div>
+      <div class="node">Hosted hop nodes<small>TCP 443, mTLS, no jobs</small></div>
+    </div>
+    <div class="lane">
+      <h3>Systems of record</h3>
+      <div class="node">Entra ID<small>People and groups</small></div>
+      <div class="node">CyberArk<small>Machine secrets</small></div>
+      <div class="node">GitHub Enterprise<small>Modules and roles</small></div>
+      <div class="node">vCenter<small>Compute</small></div>
+      <div class="node">Splunk<small>Archive</small></div>
+    </div>
+  </div>
+
+  <svg class="diagram" viewBox="0 0 960 520" role="img" aria-labelledby="d1title d1desc">
+    <title id="d1title">Outbound connections on the estate</title>
+    <desc id="d1desc">Portal, Terraform agents, AAP execution nodes, and the log collector all open outbound connections. vCenter, CyberArk, and Splunk stay internal.</desc>
+    <rect width="960" height="520" fill="#fbf7f1"/>
+    <text x="24" y="36" font-family="Georgia, serif" font-size="20" fill="#1b1916">Outbound only. Nothing from the SaaS opens a port into the estate.</text>
+    <g font-family="Segoe UI, Helvetica, sans-serif" font-size="13" fill="#1b1916">
+      <rect x="40" y="70" width="200" height="64" rx="10" fill="#e4f1f0" stroke="#0e3b3c"/>
+      <text x="56" y="96">Portal</text>
+      <text x="56" y="116" fill="#5f584e">polls HCP and calls AAP</text>
+      <rect x="40" y="160" width="200" height="64" rx="10" fill="#e4f1f0" stroke="#0e3b3c"/>
+      <text x="56" y="186">Apply agent</text>
+      <text x="56" y="206" fill="#5f584e">polls HCP, calls vCenter</text>
+      <rect x="40" y="250" width="200" height="64" rx="10" fill="#e4f1f0" stroke="#0e3b3c"/>
+      <text x="56" y="276">Ingress agent</text>
+      <text x="56" y="296" fill="#5f584e">polls HCP, calls GitHub</text>
+      <rect x="40" y="340" width="200" height="64" rx="10" fill="#e4f1f0" stroke="#0e3b3c"/>
+      <text x="56" y="366">Execution node</text>
+      <text x="56" y="386" fill="#5f584e">pulls hop :443, SSH to VM</text>
+      <rect x="40" y="430" width="200" height="64" rx="10" fill="#e4f1f0" stroke="#0e3b3c"/>
+      <text x="56" y="456">Collector</text>
+      <text x="56" y="476" fill="#5f584e">pulls audit, posts to HEC</text>
+
+      <rect x="380" y="70" width="220" height="70" rx="10" fill="#fff" stroke="#8f3412"/>
+      <text x="396" y="98">HCP Terraform</text>
+      <text x="396" y="118" fill="#5f584e">app.terraform.io :443</text>
+      <rect x="380" y="250" width="220" height="70" rx="10" fill="#fff" stroke="#8f3412"/>
+      <text x="396" y="278">AAP hosted hop nodes</text>
+      <text x="396" y="298" fill="#5f584e">mTLS websocket :443</text>
+      <rect x="380" y="360" width="220" height="54" rx="10" fill="#fff" stroke="#8f3412"/>
+      <text x="396" y="392">AAP controller API :443</text>
+
+      <rect x="720" y="160" width="200" height="54" rx="10" fill="#fff" stroke="#5f584e"/>
+      <text x="736" y="192">vCenter :443</text>
+      <rect x="720" y="230" width="200" height="54" rx="10" fill="#fff" stroke="#5f584e"/>
+      <text x="736" y="262">CyberArk CCP :443</text>
+      <rect x="720" y="300" width="200" height="54" rx="10" fill="#fff" stroke="#5f584e"/>
+      <text x="736" y="332">GitHub Enterprise :443</text>
+      <rect x="720" y="370" width="200" height="54" rx="10" fill="#fff" stroke="#5f584e"/>
+      <text x="736" y="402">Guest SSH 22 / WinRM 5986</text>
+      <rect x="720" y="440" width="200" height="54" rx="10" fill="#fff" stroke="#5f584e"/>
+      <text x="736" y="472">Splunk HEC :8088 or :443</text>
+    </g>
+    <g stroke="#0e3b3c" fill="none" stroke-width="1.4">
+      <path d="M240 102 H380"/>
+      <path d="M240 192 H380"/>
+      <path d="M240 282 H380"/>
+      <path d="M240 372 H600"/>
+      <path d="M240 462 H380" stroke-dasharray="4 4"/>
+    </g>
+    <g stroke="#5f584e" fill="none" stroke-width="1.2">
+      <path d="M240 192 H300 V187 H720"/>
+      <path d="M240 210 H320 V257 H720"/>
+      <path d="M240 282 H340 V327 H720"/>
+      <path d="M240 390 H360 V397 H720"/>
+      <path d="M240 470 H360 V467 H720"/>
+    </g>
+  </svg>
+  <p class="src">Dashed collector line to HCP is the audit pull. Solid lines into the right column stay inside the estate, except the SaaS column in the middle.</p>
+
+  <h3>Sequence of a successful non-production VM</h3>
+  <table>
+    <thead><tr><th>Step</th><th>Who</th><th>What happens</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Developer</td><td>Signs in to the portal with Entra. The app role is Requester. The session stores the user object id and UPN, nothing that can call vCenter.</td></tr>
+      <tr><td>2</td><td>Portal</td><td>Shows catalogue items that role can see. Sizes are names (small, medium), not free-form CPU. Networks are a list on the catalogue item.</td></tr>
+      <tr><td>3</td><td>Portal</td><td>Allocates <code>request_id</code> and a hostname from the pattern. Writes a row. If the request is inside quota, status becomes approved. Otherwise it waits.</td></tr>
+      <tr><td>4</td><td>Portal</td><td>Creates or reuses one HCP workspace in the non-production project, execution mode agent, pool <code>vmware-nonprod</code>, module version pinned, variables set, tags include <code>request_id</code>.</td></tr>
+      <tr><td>5</td><td>HCP</td><td>Queues a run. An apply agent picks it up. Policy runs. On pass, the portal team token applies, because this is non-production.</td></tr>
+      <tr><td>6</td><td>Apply agent</td><td>Reads vCenter credentials from the host environment, which a local timer refreshed from CyberArk. Clones the template. Outputs hostname and IP.</td></tr>
+      <tr><td>7</td><td>Collector</td><td>Sees the apply audit event, stores it in Splunk, and moves the portal row to <code>configuring</code>. The portal does not scrape every workspace.</td></tr>
+      <tr><td>8</td><td>Portal</td><td>Upserts an AAP inventory host and launches the baseline workflow with <code>limit</code> set to that host and <code>request_id</code> in extra vars. Instance group is <code>ig-vmware-nonprod</code>.</td></tr>
+      <tr><td>9</td><td>Execution node</td><td>Already connected outbound to a hosted hop node. Receives the job, loads SSH credentials via the CyberArk plugin, runs the baseline, registers DNS.</td></tr>
+      <tr><td>10</td><td>Portal</td><td>Polls that one AAP job. On success, status is <code>active</code>. The developer sees hostname, IP, the HCP run URL, and the AAP job URL.</td></tr>
+    </tbody>
+  </table>
+  <p>Production stops after the plan and the policy check. The portal deep-links the approver to the run. The approver signs in to HCP with Entra and applies. The audit event records that user. The portal notices the applied event through the collector and only then launches Ansible.</p>
+
+  <h3>Status model</h3>
+  <table>
+    <thead><tr><th>Status</th><th>Meaning</th><th>Retry</th></tr></thead>
+    <tbody>
+      <tr><td>draft</td><td>Not submitted</td><td>Edit</td></tr>
+      <tr><td>pending_approval</td><td>Waiting for a person</td><td>Expires after five business days</td></tr>
+      <tr><td>rejected</td><td>Approver rejected</td><td>New request</td></tr>
+      <tr><td>queued / planning / applying</td><td>HCP run in flight</td><td>Do not start a second run for the same request</td></tr>
+      <tr><td>policy_failed / apply_failed</td><td>No baseline will run</td><td>Fix inputs or the platform fault, queue one new run on the same workspace</td></tr>
+      <tr><td>configuring</td><td>VM exists, baseline in flight</td><td>If it fails, <code>config_failed</code>. Retry Ansible only</td></tr>
+      <tr><td>active</td><td>Handed to the requester</td><td>Day-2 actions</td></tr>
+      <tr><td>destroy_pending / destroyed / destroy_failed</td><td>Decommission</td><td>Retire job, Terraform destroy, remove AAP host, remove DNS. Keep the portal row</td></tr>
+    </tbody>
+  </table>
+
+  <h3>HCP Terraform layout</h3>
+  <table>
+    <thead><tr><th>Object</th><th>Name</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td>Organisation</td><td>chosen once, region-bound</td><td>Estate only. The showcase never joins this organisation.</td></tr>
+      <tr><td>Project</td><td>platform-control</td><td>The workspace that manages projects, pools, and policy attachments. Platform admins only. No vCenter access.</td></tr>
+      <tr><td>Project</td><td>vmware-nonprod</td><td>One workspace per non-production VM.</td></tr>
+      <tr><td>Project</td><td>vmware-prod</td><td>One workspace per production VM. Apply permission is the approver team, not the portal team.</td></tr>
+      <tr><td>Project</td><td>azure-landing</td><td>Reserved. Empty in version 1.</td></tr>
+      <tr><td>Project</td><td>ocp-nonprod</td><td>Reserved for stage 2 namespaces. Empty in version 1.</td></tr>
+      <tr><td>Team</td><td>platform-admins</td><td>Owners of modules, control project, agent tokens.</td></tr>
+      <tr><td>Team</td><td>portal-nonprod</td><td>Team token used by the portal. Create workspace, write variables, apply, read outputs. No state download. Non-production project only.</td></tr>
+      <tr><td>Team</td><td>portal-prod-plan</td><td>Queue plans in production. Cannot apply.</td></tr>
+      <tr><td>Team</td><td>prod-approvers</td><td>Humans. Apply in production. SSO accounts, no shared user.</td></tr>
+      <tr><td>Team</td><td>auditors</td><td>Read runs. No apply. Audit token is separate and is not this team’s token.</td></tr>
+      <tr><td>Pool</td><td>private-ingress</td><td>Request forwarding on. Accept ingress only. Can reach GitHub Enterprise. No vCenter credentials on these hosts.</td></tr>
+      <tr><td>Pool</td><td>vmware-nonprod</td><td>Plan, apply, policy, assessment. vCenter non-production role. CyberArk safe for that environment only.</td></tr>
+      <tr><td>Pool</td><td>vmware-prod</td><td>Same, production role and production safe. At least two agents.</td></tr>
+    </tbody>
+  </table>
+  <div class="callout warn">
+    <strong class="k">API budget</strong>
+    HashiCorp’s published technical limits show 30 API requests per minute on Free, Essentials, Standard, and Premium. The portal, the collector, and any human scripts share that budget. Poll in-flight work and the audit stream. Do not walk all 3,000 workspaces. Ask in the sales conversation whether a contract raises the limit, and design as if it does not.
+  </div>
+  <div class="callout estate">
+    <strong class="k">Tokens</strong>
+    An organisation token can administer teams and workspaces and cannot plan or apply. A team token plans and applies. An audit-trail token reads the audit API and nothing else. A user token is a person. The portal stores a team token in CyberArk and fetches it at runtime. Agent tokens are created per pool, stored in CyberArk, and are not resources in the control-plane state. State that contains a token will eventually be read by someone debugging a plan.
+  </div>
+
+  <h3>Catalogue, guardrails, and the module contract</h3>
+  <p>A developer never picks a datastore, a cluster, or a port group. They pick a catalogue item and a size. The platform team maps those to vCenter objects. Quotas live in the portal database so a platform admin can change them without a Terraform release. Every change to quota is itself an audit event.</p>
+  <p>Suggested hostname pattern: <code>{env}-{os}-{service}-{nn}</code>, for example <code>np-l-payments-04</code>. The portal allocates it. Terraform receives it as an input and does not invent a second name.</p>
+  <p>Required metadata on every VM, carried as catalogue fields and written into vSphere custom attributes or notes because the vSphere provider’s tag attribute is a set of tag ids, not a free-form map: <code>owner</code>, <code>cost_centre</code>, <code>environment</code>, <code>service</code>, <code>data_class</code>, <code>request_id</code>, <code>managed_by=terraform</code>, <code>backup=standard</code>.</p>
+  <p>Guardrails, in order:</p>
+  <ol>
+    <li>The form only offers legal combinations. That is the portal.</li>
+    <li>The module’s variable validation rejects a CPU count the size menu does not contain.</li>
+    <li>OPA on the plan rejects resource types outside the allowlist, a name that breaks the pattern, and a CPU or memory value above the catalogue ceiling. Free edition can hold one policy set of up to five policies, which is enough for the showcase. The estate uses a VCS-backed policy set, which the docs attach to Standard and Premium.</li>
+    <li>The vCenter role on the agent account can create in the sandbox or target folder and cannot administer the vCenter.</li>
+  </ol>
+  <p>Pin Terraform itself to an exact version per project, 1.10 or newer at implementation time. Agents download that version from an internal mirror, not from a floating “latest”.</p>
+
+  <h3>What Terraform owns, and what Ansible owns</h3>
+  <table>
+    <thead><tr><th>Terraform</th><th>Ansible baseline</th><th>Neither, in version 1</th></tr></thead>
+    <tbody>
+      <tr><td>Folder placement, clone from template, CPU, memory, disks, NIC, port group, guest customisation inputs, custom attributes</td><td>Domain join or local access, DNS A record, time sync, Splunk forwarder, the estate hardening baseline, a file <code>/etc/infra-id</code> containing <code>request_id</code></td><td>Patching calendar, backup product configuration beyond the tag, CMDB, image build, OpenShift namespaces</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Stage 2, without designing it fully</h3>
+  <p>OpenShift does not go through the VM module. A later catalogue item “namespace” uses the Kubernetes provider from an agent pool <code>ocp-nonprod</code> that can reach the API. The kube token comes from CyberArk onto that agent, the same injection pattern as vCenter. AAP’s Kubernetes collection is for application configuration inside the namespace, and only if you still want Ansible there. Cluster build stays with the OpenShift platform team.</p>
+  <p>Azure on the estate uses a new catalogue item and the <code>azurerm</code> provider. Authentication is workload identity from HCP to Entra, not CyberArk passwords. Remote execution is enough while the targets are public Azure APIs. Add an Azure agent pool when the landing zone moves to private endpoints. Do not fold Azure resources into the vSphere module.</p>
+
+  <h3>Capacity sketch for purchasing</h3>
+  <p>Agent concurrency is about simultaneous plans, not about how many VMs exist. Three thousand mostly idle workspaces do not need 300 concurrent agents. Standard’s published 10 concurrent agent runs can drain a large nightly drift window if each plan is short, and it is tight if a module upgrade plans hundreds of workspaces during the working day. Premium’s published 300 concurrent agent runs are comfortable. The stronger reasons to buy Premium, on the current docs, are private VCS and audit logging.</p>
+  <p>Billing is per managed resource per hour, peak in that hour, and a partial hour counts as a whole hour. Workspaces are unlimited on every published plan. A VM plus disks and a NIC is several managed resources; <code>terraform_data</code> and data sources are not. Measure a real plan before you believe a cost model. As an illustration only: if a VM averages 8 managed resources and the published Premium starting rate of $0.99 per resource per month still applies, 3,000 VMs are on the order of 24,000 resources and roughly $24,000 a month at list, before a Flex or enterprise discount. HashiCorp’s product docs also say to contact sales for Standard and Premium. Treat the illustration as a reason to estimate, not as a quote.</p>
+  <p>AAP on AWS includes two hosted hop nodes and 10 RHEL entitlements for the execution plane, as documented in the service definition. Version 1 needs four execution nodes if you split non-production and production into pairs. That fits in the included entitlements. Size each node at 4 vCPU and 16 GB to start, and watch job queue time.</p>
+</section>
+
+<section class="panel" role="tabpanel" id="demo" aria-labelledby="tab-demo" hidden>
+  <h2>Personal showcase</h2>
+  <p><span class="pill demo">Showcase</span> This profile exists so you can learn the pattern on accounts you control, and later show it to a client without ever having pointed the code at the company. It is a real provisioner of Azure VMs. It is not a simulation of vCenter, CyberArk, or Red Hat’s control plane.</p>
+  <div class="callout bad">
+    <strong class="k">Boundary</strong>
+    Use a personal Azure subscription and an Entra tenant that contains no company users. Use a separate HCP organisation and a separate GitHub account. Do not copy company hostnames, safe names, or tokens into this repo. When you demo, say which boxes were proved and which are estate-only. That list is at the end of this section.
+  </div>
+
+  <h3>What the audience sees</h3>
+  <ol>
+    <li>You open the portal and sign in with Entra. No local password.</li>
+    <li>You request “Linux, small, development”. Quota is three VMs so a demo cannot run away.</li>
+    <li>The portal opens an HCP run. You show the run in HCP, still inside your organisation.</li>
+    <li>An Ubuntu VM appears in <code>rg-demo-workloads</code> with no public IP.</li>
+    <li>A runner VM in that VNet picks up a configuration job, SSHs to the guest, and writes <code>/etc/infra-id</code>.</li>
+    <li>The portal shows the request active, and an Audit page shows the same JSON you would have posted to Splunk.</li>
+    <li>You destroy it. The VM and the portal row’s status both end. The row remains.</li>
+  </ol>
+
+  <svg class="diagram" viewBox="0 0 960 420" role="img" aria-labelledby="d2title d2desc">
+    <title id="d2title">Showcase on Azure</title>
+    <desc id="d2desc">A portal on App Service signs users in with Entra, calls HCP Terraform, and is polled by a runner inside a private VNet. Workload VMs have no public address.</desc>
+    <rect width="960" height="420" fill="#fbf7f1"/>
+    <text x="24" y="34" font-family="Georgia, serif" font-size="20" fill="#1b1916">Showcase. Remote Terraform by default. The runner polls. Guests stay private.</text>
+    <g font-family="Segoe UI, Helvetica, sans-serif" font-size="13" fill="#1b1916">
+      <rect x="30" y="60" width="180" height="70" rx="10" fill="#f3eef7" stroke="#3c2a52"/>
+      <text x="46" y="90">You, in a browser</text>
+      <text x="46" y="110" fill="#5f584e">Entra login</text>
+      <rect x="250" y="60" width="200" height="86" rx="10" fill="#f3eef7" stroke="#3c2a52"/>
+      <text x="266" y="90">App Service</text>
+      <text x="266" y="110" fill="#5f584e">portal + audit page</text>
+      <text x="266" y="128" fill="#5f584e">OIDC, not Easy Auth only</text>
+      <rect x="490" y="60" width="180" height="70" rx="10" fill="#fff" stroke="#8f3412"/>
+      <text x="506" y="90">HCP Terraform</text>
+      <text x="506" y="110" fill="#5f584e">remote execution</text>
+      <rect x="710" y="60" width="210" height="86" rx="10" fill="#fff" stroke="#5f584e"/>
+      <text x="726" y="90">Entra</text>
+      <text x="726" y="110" fill="#5f584e">portal app + federated</text>
+      <text x="726" y="128" fill="#5f584e">credential for Azure RM</text>
+      <rect x="30" y="200" width="280" height="180" rx="12" fill="#f7f3fb" stroke="#3c2a52"/>
+      <text x="46" y="224">VNet, no public IPs on guests</text>
+      <rect x="50" y="244" width="150" height="64" rx="8" fill="#fff" stroke="#3c2a52"/>
+      <text x="64" y="270">Runner VM</text>
+      <text x="64" y="290" fill="#5f584e">polls portal, runs Ansible</text>
+      <rect x="214" y="244" width="76" height="110" rx="8" fill="#fff" stroke="#3c2a52"/>
+      <text x="226" y="280">VM</text>
+      <text x="226" y="300">VM</text>
+      <text x="226" y="320">VM</text>
+      <rect x="340" y="220" width="200" height="70" rx="10" fill="#fff" stroke="#5f584e"/>
+      <text x="356" y="250">Key Vault</text>
+      <text x="356" y="270" fill="#5f584e">HCP team token, SSH key</text>
+      <rect x="560" y="220" width="200" height="70" rx="10" fill="#fff" stroke="#5f584e"/>
+      <text x="576" y="250">PostgreSQL</text>
+      <text x="576" y="270" fill="#5f584e">requests and audit events</text>
+      <rect x="340" y="310" width="420" height="64" rx="10" fill="#fff" stroke="#5f584e"/>
+      <text x="356" y="338">Optional: agent VM in the VNet, pool showcase-agent</text>
+      <text x="356" y="356" fill="#5f584e">Turn this on when you want to show self-hosted execution. Azure itself does not require it.</text>
+    </g>
+  </svg>
+
+  <h3>Why remote execution is the default here</h3>
+  <p>Azure Resource Manager is a public API. HCP can reach it. The reason the estate runs agents is vCenter, which HCP cannot reach. Teaching those as the same requirement would be wrong. The showcase default is remote execution with workload identity:</p>
+  <ul>
+    <li>One Entra app registration for the portal, confidential client, authorization code with PKCE, app roles Requester and Approver.</li>
+    <li>A second app registration <code>demo-hcp-azure</code> with a federated credential whose subject matches the showcase HCP organisation and project, not one credential per VM workspace. Entra limits how many federated credentials an app can hold, and you will create many workspaces.</li>
+    <li>Workspace environment variables turn on the Azure dynamic provider credentials. No client secret in HCP, in Git, or in the portal.</li>
+  </ul>
+  <p>An optional agent on a small Azure VM, pool <code>showcase-agent</code>, is a catalogue switch. Use it for one request during a demo so you can show the poll in the agent log. Leave the default on remote so a client sees the choice was deliberate.</p>
+
+  <h3>The runner is not AAP</h3>
+  <p>App Service should not SSH to guests. Guests have no public IP. The runner sits in the VNet, holds an SSH key from Key Vault via its own managed identity, and polls the portal for configuration jobs. That pull is the teaching analogue of an execution node pulling from a hop node. The portal code calls a <code>ConfigRunner</code> interface. The showcase implementation writes a job row. The estate implementation calls the AAP launch API. Swapping them is configuration.</p>
+  <p>If you later buy AAP yourself, put one execution node in this VNet, peer it to the hosted hop nodes, and switch the profile. Do not keep the homemade runner in that demo, or you will show two orchestrators.</p>
+
+  <h3>Guardrails you can actually show on Free</h3>
+  <p>The published policy note says Free includes one policy set of up to five policies. The comparison table paints policy as a Standard feature. Believe the more specific note, and recheck on the org. Put five rules in the showcase set: allowed resource types, location allowlist, no public IP, VM size allowlist, required tags. Portal quota is the control that works even if the free policy UI surprises you.</p>
+  <p>Free does not include the audit-trail API on either published table. The showcase Audit page is fed by the portal’s own events plus run status it already polled. When you move the showcase org to Premium, point the same collector at the audit API and keep the page as a second view. Until then, do not tell a client you shipped HCP audit logs.</p>
+
+  <h3>Claims you can make, and claims you should not</h3>
+  <table>
+    <thead><tr><th>You can say</th><th>You should not say</th></tr></thead>
+    <tbody>
+      <tr><td>A user signs in with Entra and requests a machine from a catalogue.</td><td>This portal is connected to the company vCenter.</td></tr>
+      <tr><td>HCP Terraform created the VM. Here is the run.</td><td>The company agent mesh is running in this subscription.</td></tr>
+      <tr><td>Configuration is a separate step from provisioning, pulled by a worker inside the network.</td><td>This worker is Red Hat AAP.</td></tr>
+      <tr><td>Secrets for the demo are in Key Vault. The estate design uses CyberArk at the same interface.</td><td>CyberArk was tested.</td></tr>
+      <tr><td>Audit events use the schema the Splunk collector will ingest.</td><td>Splunk Enterprise retained the company audit trail, unless you actually configured a HEC and show that search.</td></tr>
+      <tr><td>Production apply on the estate is a different person’s action inside HCP.</td><td>This demo’s one-click approve is the production SoD design. The demo approver can be you, because you are the only person in the tenant. Say that out loud.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Cost and safety rails</h3>
+  <ul>
+    <li>Two resource groups: <code>rg-demo-control</code> for the portal, database, Key Vault, and runner; <code>rg-demo-workloads</code> for requested VMs.</li>
+    <li>An Azure budget alert at a number you choose before the first apply.</li>
+    <li>Portal quota of three workload VMs and one size, <code>Standard_B2s</code> or similar.</li>
+    <li>Auto-shutdown is optional. Destroy from the portal is mandatory in the demo script so you do not leave VMs behind.</li>
+    <li>HCP Free includes 500 managed resources. A handful of demo VMs will not get near it. Delete workspaces after destroy if you want the organisation to stay obviously empty.</li>
+  </ul>
+</section>
+
+<section class="panel" role="tabpanel" id="agents" aria-labelledby="tab-agents" hidden>
+  <h2>How the two agents work together</h2>
+  <p>They are both required on the estate, and they are not two copies of the same idea. HCP Terraform agents change infrastructure through APIs such as vCenter. AAP execution nodes change the operating system through SSH or WinRM. Red Hat’s managed control plane does not reach into vCenter for you, and the Terraform agent does not become an Ansible controller.</p>
+
+  <div class="grid two">
+    <article class="card">
+      <h3>HCP Terraform agent</h3>
+      <ul>
+        <li>Polls <code>app.terraform.io</code> outbound on TCP 443. No inbound port.</li>
+        <li>Runs Terraform for workspaces assigned to its pool.</li>
+        <li>On the estate it must reach vCenter and CyberArk.</li>
+        <li>A separate pool reaches GitHub Enterprise and must not hold vCenter credentials.</li>
+        <li>HashiCorp documents request forwarding as something to isolate from user code. The ingress pool accepts <code>ingress</code> and does not accept plan or apply.</li>
+      </ul>
+    </article>
+    <article class="card">
+      <h3>AAP execution node</h3>
+      <ul>
+        <li>Red Hat runs the controller in their AWS account. You run the execution plane.</li>
+        <li>The service includes two hosted hop nodes. In the pull model, your execution node opens a mutual-TLS websocket to a hop node on TCP 443.</li>
+        <li>A proxy that terminates TLS breaks that mesh. This is documented.</li>
+        <li>Hop nodes route. They do not run playbooks. Test jobs on the controller are the exception Red Hat keeps for the service itself. Your jobs run on your nodes.</li>
+        <li>The node must reach guest SSH 22 and, later, WinRM 5986, plus CyberArk and your DNS.</li>
+      </ul>
+    </article>
+  </div>
+
+  <h3>The handoff</h3>
+  <p>Terraform finishing a VM is not the signal to configure it from inside Terraform. A second apply would re-run a local provisioner, destroy would be confused with “unconfigure”, and the vCenter credential and the root-on-every-guest credential would meet on one host. The portal holds the handoff.</p>
+  <ol>
+    <li>Terraform outputs are the contract: hostname, IP, and <code>request_id</code>. The portal reads outputs, not the state file.</li>
+    <li>The portal adds or updates one AAP inventory host and launches one workflow job template, limited to that host, targeted at the instance group for that environment.</li>
+    <li>The controller accepts the launch on its public API. Your portal calls that API outbound. The controller does not connect inbound to the portal.</li>
+    <li>The execution node, which is already pulling, runs the job. If the job fails, the VM stays, the portal status is <code>config_failed</code>, and the retry button launches Ansible again.</li>
+  </ol>
+  <p>There is an Ansible provider for Terraform and an <code>aap_job</code> resource that can launch a job at the end of apply. It is a reasonable looking shortcut and it is the wrong default here. Keep it as a documented rejection unless you later have no portal at all, in which case Waypoint actions or a run task are still cleaner than a provisioner.</p>
+
+  <h3>Could they be the same virtual machine?</h3>
+  <p>In a one-node lab, yes. In the estate, no. The apply agent’s vCenter account can create machines. The execution node’s SSH path can become root on the machines that already exist. One compromised host should not get both. Give them different subnets or at least different service accounts, different CyberArk safes, and different admin groups. The ingress agents are a third set, because request forwarding can see tokens HCP asks the agent to present to GitHub.</p>
+
+  <h3>Align the names</h3>
+  <table>
+    <thead><tr><th>Environment</th><th>HCP pool</th><th>AAP instance group</th><th>CyberArk safe</th><th>vCenter role</th></tr></thead>
+    <tbody>
+      <tr><td>Non-production</td><td>vmware-nonprod</td><td>ig-vmware-nonprod</td><td>PLAT-VC-NP and PLAT-SSH-NP</td><td>Clone into non-production folders only</td></tr>
+      <tr><td>Production</td><td>vmware-prod</td><td>ig-vmware-prod</td><td>PLAT-VC-PR and PLAT-SSH-PR</td><td>Clone into production folders only</td></tr>
+      <tr><td>Private Git</td><td>private-ingress</td><td>none</td><td>PLAT-GHE-READ</td><td>None</td></tr>
+    </tbody>
+  </table>
+  <p>A catalogue item stores the pool and the instance group together. There is no request that plans on the non-production pool and configures on the production instance group.</p>
+
+  <h3>What each side needs to be able to reach</h3>
+  <table>
+    <thead><tr><th>From</th><th>To</th><th>Port</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Apply agent</td><td>app.terraform.io, registry, releases or your mirror</td><td>443 out</td><td>Poll, providers, Terraform binaries</td></tr>
+      <tr><td>Apply agent</td><td>vCenter</td><td>443</td><td>Clone and customize</td></tr>
+      <tr><td>Apply agent</td><td>CyberArk CCP</td><td>443</td><td>Refresh the vCenter account</td></tr>
+      <tr><td>Ingress agent</td><td>GitHub Enterprise</td><td>443</td><td>Private VCS. No path to vCenter</td></tr>
+      <tr><td>Execution node</td><td>Hosted hop nodes</td><td>443 out</td><td>Pull mesh. No TLS inspection</td></tr>
+      <tr><td>Execution node</td><td>Guests</td><td>22, later 5986</td><td>Baseline</td></tr>
+      <tr><td>Execution node</td><td>CyberArk CCP, DNS</td><td>443, 53</td><td>SSH secrets and the A record</td></tr>
+      <tr><td>Portal</td><td>HCP API and AAP controller API</td><td>443 out</td><td>Create runs and launch jobs</td></tr>
+      <tr><td>Collector</td><td>HCP audit API and Splunk HEC</td><td>443 out, HEC as deployed</td><td>Archive. Audit retention in HCP is 14 days</td></tr>
+    </tbody>
+  </table>
+  <p>The push mesh, default receptor port 27199 inbound from Red Hat, is the alternative when a network cannot pull. Version 1 does not use it. It opens the estate to the control plane and it is the opposite of the agent pattern you are standardising on.</p>
+  <p>Project sync in managed AAP runs on the control plane. A private GitHub Enterprise is therefore not solved by the execution node being able to see GitHub. Publish collections from a self-hosted GitHub runner outbound to the managed Automation Hub, and point job templates at those collections. Confirm with Red Hat, during onboarding, whether your contract’s version can pin project updates onto a customer execution node. If they can, a project that clones through the execution node becomes a second valid option. Do not block the design on that confirmation.</p>
+
+  <h3>Showcase equivalent</h3>
+  <p>Remote HCP execution replaces the apply agent, because Azure RM is public. Workload identity replaces CyberArk for Azure. The runner VM replaces the execution node and polls your portal instead of a Red Hat hop node. The optional <code>showcase-agent</code> pool is how you demonstrate the real agent binary without pretending Azure needed it. There is no ingress pool unless you deliberately put a private Git server in the demo.</p>
+</section>
+
+<section class="panel" role="tabpanel" id="access" aria-labelledby="tab-access" hidden>
+  <h2>Identity, secrets, and Splunk</h2>
+  <h3>Two different logins</h3>
+  <p>Entra is the identity provider for people. Every product that has a screen gets its own enterprise application and its own SAML or OIDC trust. A user who has signed in to the portal can open a deep link to a run, a job, or a Splunk search and land there without typing a password, because that product also trusts Entra and the browser already has a session. The portal does not forward its access token to HCP, AAP, vCenter, or Splunk. Those products do not accept an Entra token for the portal as a credential.</p>
+  <p>Automation is a second population. The portal’s team token, the agent tokens, the AAP OAuth token, and the vCenter account are machine identities. They are stored in CyberArk on the estate and in Key Vault on the showcase. They are not the developer’s session. A person leaving the company must not take provisioning with them, and an approval must still name the human who asked.</p>
+  <table>
+    <thead><tr><th>Surface</th><th>Human</th><th>Machine</th></tr></thead>
+    <tbody>
+      <tr><td>Portal</td><td>OIDC authorization code, app roles</td><td>The app’s own client credential, used only where a downstream API requires an application</td></tr>
+      <tr><td>HCP Terraform</td><td>SAML to Entra</td><td>Team token for non-production apply. Audit-trail token for the collector. Agent tokens on the hosts</td></tr>
+      <tr><td>AAP</td><td>SAML or OIDC to Entra</td><td>OAuth token scoped to launch specific workflows, stored in CyberArk</td></tr>
+      <tr><td>GitHub Enterprise</td><td>SAML to Entra</td><td>A GitHub App or fine-scoped PAT for the publisher, in CyberArk</td></tr>
+      <tr><td>Splunk</td><td>SAML to Entra</td><td>HEC token used only by the collector, in CyberArk</td></tr>
+      <tr><td>CyberArk PVWA</td><td>SAML to Entra</td><td>App ID plus certificate for CCP. Dual control on the break-glass safe</td></tr>
+      <tr><td>vCenter</td><td>Existing directory accounts for people</td><td>One automation account per environment, retrieved by the agent, not by developers</td></tr>
+      <tr><td>Azure, showcase and later estate</td><td>Entra</td><td>Federated credential from HCP. Managed identity for the portal and the runner</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Portal roles</h3>
+  <p>Use Entra app roles rather than a raw group claim. Large estates hit group overage, and roles stay stable when group names change.</p>
+  <ul>
+    <li><code>Requester</code> can submit and see their own requests.</li>
+    <li><code>NonprodApprover</code> can approve non-production exceptions over quota.</li>
+    <li><code>ProdApprover</code> can approve the portal step for production. They also have an HCP account in <code>prod-approvers</code>, because the apply click happens there.</li>
+    <li><code>PlatformAdmin</code> manages catalogue items and quotas.</li>
+    <li><code>Auditor</code> can read every request and cannot approve or launch.</li>
+  </ul>
+  <p>The portal refuses a production approval where the approver’s object id equals the requester’s object id.</p>
+
+  <h3>Break-glass</h3>
+  <p>Turn on “SSO required” in HCP only after two break-glass owner accounts exist, their passwords or keys sit in a CyberArk safe with dual control, and you have signed in with one. Test that path once a year. The same pattern applies to AAP and to the portal’s local emergency admin, which should be disabled in normal configuration and recorded loudly when enabled. Agent token rotation overlaps: create a new token, store it, restart one agent, restart the rest, revoke the old token. HCP allows more than one token on a pool so you do not have to take the pool down to rotate.</p>
+
+  <h3>Where the vCenter password lives</h3>
+  <p>On the apply agent, a systemd timer calls CCP with that host’s certificate and writes <code>VSPHERE_USER</code> and <code>VSPHERE_PASSWORD</code> into a root-only environment file, then restarts the agent only when the secret changed. The Terraform provider block is empty and reads those variables. The password is not an HCP variable, so it is not sitting in the SaaS as a workspace secret, and it is not in Git. It will still appear in the agent’s memory during a run, and a badly written output can still leak it into a plan log. Mark every module output explicit and small. The Splunk run-log path redacts lines that look like credentials before they are indexed.</p>
+  <p>AAP uses the CyberArk credential plugin on the machine credential. The controller stores the CyberArk query, not the SSH password. The execution node resolves it at job time.</p>
+
+  <h3>Splunk</h3>
+  <p>HCP keeps audit events for 14 days. After that they are gone. Splunk is the archive, so the collector is in the same operational class as the agents: if it is down for more than 14 days, you have a gap you cannot backfill. Alert when the checkpoint is older than 30 minutes.</p>
+  <p>Audit events and run logs are different objects. An audit event says who applied run <code>run-…</code>. The plan and apply stdout is a log you fetch from the run’s plan and apply log URLs. The official Splunk app pulls the audit API. It is the right tool on Splunk Cloud or on a non-clustered indexer, and HashiCorp documents it as unsupported on a clustered Splunk Enterprise deployment. A 3,000-server estate usually has a cluster. Build one collector.</p>
+  <ul>
+    <li>It authenticates to <code>GET /api/v2/organization/audit-trail</code> with the audit-trail token. The organisation is implied by the token. Use <code>since</code> and a checkpoint. Page size up to 1000.</li>
+    <li>It writes those events to index <code>hcp_audit</code> and, in the same pass, updates portal rows when the event refers to a <code>request_id</code> it can see in resource metadata or in a workspace tag it has cached.</li>
+    <li>For runs that reached a terminal state and are not yet archived, it fetches plan and apply logs with a team token that is allowed to read those workspaces, redacts, and writes index <code>hcp_runs</code>. Budget this. A noisy fetcher will spend the 30 requests per minute by itself.</li>
+    <li>It never downloads state.</li>
+  </ul>
+  <p>Also index, from Universal Forwarders on the hosts: agent journals to <code>hcp_agent</code>, execution-node journals beside AAP’s own activity stream in <code>aap_audit</code>, and portal application audit events in <code>portal_audit</code>. A useful search is any index containing a <code>request_id</code>.</p>
+  <p>On the showcase, the portal writes the same event schema into Postgres and renders it. A setting <code>SPLUNK_HEC_URL</code> forwards the same payload when you have somewhere to send it. HCP’s push-based log streaming is a separate feature aimed at Splunk Cloud HEC endpoints, and its docs exclude free-trial endpoints and endpoints with custom firewalls. The puller is the design that works for on-prem Splunk Enterprise. Use it in both profiles.</p>
+
+  <h3>Correlation</h3>
+  <p>Put <code>request_id</code> on the portal row, the HCP workspace tag, a Terraform output, the AAP extra var, the guest file <code>/etc/infra-id</code>, and every log event. Without that, Splunk has three products and no story.</p>
+</section>
+
+<section class="panel" role="tabpanel" id="runbook" aria-labelledby="tab-runbook" hidden>
+  <h2>Runbook</h2>
+  <p>Two tracks. Track C is the estate and assumes company subscriptions, vCenter, CyberArk, Splunk, and a private GitHub Enterprise. Track D is the showcase on your personal Azure and HCP accounts. Do not mix organisations, tokens, or agent pools between them.</p>
+  <div class="callout warn">
+    <strong class="k">Before either track</strong>
+    This runbook is the procedure for a later implementation. Following it creates real infrastructure and real spend. Finish the questions that block purchasing first. On the estate, stop at the first verification that fails. On the showcase, set a budget alert before the first VM.
+  </div>
+  <p class="toc">Jump: <a href="#c0">Estate</a> · <a href="#d0">Showcase</a> · <a href="#game">Game day</a></p>
+
+  <h3 id="c0">Track C · Estate</h3>
+
+  <details class="phase" open>
+    <summary>C0. Freeze the decisions that change the buy</summary>
+    <ol>
+      <li>Record answers to questions 1, 2, 8, 9, and 12. Region, edition, GitHub reachability, CyberArk product, Splunk topology, and TLS inspection.</li>
+      <li>If TLS inspection cannot be bypassed for the execution-node egress, stop. The pull mesh is not supported through a TLS-terminating proxy. Redesign with Red Hat before you buy on the assumption that pull will work.</li>
+      <li>Estimate managed resources from one real VM plan times the estate size. Take that number to HashiCorp with the Premium conversation, including whether the 30 requests per minute limit is contractual.</li>
+      <li>Book AAP on AWS with execution in your data centre, pull connectivity, and enough RHEL entitlements for four execution nodes. The published inclusion is 10.</li>
+    </ol>
+    <p>Verify: a one-page decision record names the region, the edition, and the GitHub path. No agents installed yet.</p>
+  </details>
+
+  <details class="phase">
+    <summary>C1. Create the HCP organisation</summary>
+    <ol>
+      <li>Sign in at <code>https://app.terraform.io</code> for the US region, or the Europe portal if question 1 selected EU. A Europe org uses <code>app.eu.terraform.io</code>. Treat the choice as permanent unless sales confirms a migration.</li>
+      <li>Create an organisation whose name you are willing to keep. It appears in module addresses (<code>app.terraform.io/ORG/...</code>) and in federated-credential subjects later.</li>
+      <li>Select Premium once the contract exists. Do not build the estate on a Free org and plan to “move” the agents; you can rebuild, but SSO, pools, and workspaces are easier created in the real org.</li>
+      <li>Create the showcase organisation in a different login. Never invite company operators into it, and never invite your personal demo user as an owner of the estate org.</li>
+      <li>In organisation settings, record the entitlement set from the API (<code>GET /api/v2/organizations/ORG/entitlement-set</code>) and file it. You want to see <code>agents</code>, <code>private-vcs</code>, <code>audit-logging</code>, and <code>policy-enforcement</code> before you depend on them. The Splunk marketing page and the plan-limits table have disagreed about whether Standard includes audit; the entitlement set is the answer that matters.</li>
+    </ol>
+    <p>Verify: you can open the org as an owner. A second human owner exists. The entitlement response is saved in the platform ticket, not in Git.</p>
+  </details>
+
+  <details class="phase">
+    <summary>C2. Name everything before you click</summary>
+    <p>Create the projects, teams, and pools from the estate layout table, empty. Names are the ones in that table unless the company has a naming standard that already covers them. Write the map into the catalogue design: which Entra app role corresponds to which HCP team. They are not the same object and they are not automatically linked.</p>
+    <p>Verify: a user who is only in <code>prod-approvers</code> cannot see the non-production project. A user who is only in <code>portal-nonprod</code> does not exist yet as a human; that team will only have a team token.</p>
+  </details>
+
+  <details class="phase">
+    <summary>C3. Entra applications</summary>
+    <ol>
+      <li>App registration <code>idp-portal</code>. Redirect URI is the internal portal URL plus <code>/auth/callback</code>. Enable the authorization code flow. Add app roles Requester, NonprodApprover, ProdApprover, PlatformAdmin, Auditor. Assign those roles to Entra groups, not to individuals.</li>
+      <li>Issue a certificate for the portal’s confidential client. Put the private key in CyberArk. The portal retrieves it at start.</li>
+      <li>Non-gallery SAML apps for HCP Terraform, AAP, Splunk, GitHub Enterprise, and CyberArk PVWA. For each, copy the reply URL and identifier from that product’s SSO screen, upload the Entra federation metadata, and map email and name. Assign a pilot group of two people, not the whole company.</li>
+      <li>Leave “SSO required” off in every product until C4 is done.</li>
+    </ol>
+    <p>Verify: a pilot user can open the portal callback URL and you see the authorization code land. Do not turn on the whole catalogue yet. A pilot user can also sign in to HCP through Entra and is not an owner.</p>
+  </details>
+
+  <details class="phase">
+    <summary>C4. Break-glass, then require SSO</summary>
+    <ol>
+      <li>Create two HCP owner accounts that are exempt from day-to-day use. Store their recovery in the dual-control safe.</li>
+      <li>Sign in with one of them on a clean browser profile and confirm you can disable SSO if Entra is down.</li>
+      <li>Turn on SSO required for the pilot group’s test, then for the organisation.</li>
+      <li>Repeat the same idea for AAP once the controller exists: a local emergency admin, sealed, tested, then SAML required.</li>
+    </ol>
+    <p>Verify: an ordinary user without an Entra assignment cannot sign in. A break-glass owner still can. Record the test date.</p>
+  </details>
+
+  <details class="phase">
+    <summary>C5. Control-plane workspace</summary>
+    <ol>
+      <li>Create a workspace <code>control-plane</code> in project <code>platform-control</code>. Execution mode is remote. It only talks to the HCP API.</li>
+      <li>Give only <code>platform-admins</code> access. The portal teams have none.</li>
+      <li>Later, this workspace manages projects, team access, agent pool objects, and policy set attachments through the Terraform provider for HCP Terraform. It does not manage agent token resources.</li>
+      <li>Until that code exists, the clicks you made in C2 are the source of truth. When you import them, import pools and projects, and leave tokens outside state.</li>
+    </ol>
+    <p>Verify: a plan in <code>control-plane</code> shows no vSphere provider and no Azure provider.</p>
+  </details>
+
+  <details class="phase">
+    <summary>C6. Network for the workers</summary>
+    <ol>
+      <li>Place apply agents, ingress agents, and execution nodes on a platform subnet with no inbound admin from user desktops. Administration is through a jump host with MFA.</li>
+      <li>Egress allowlist, without TLS inspection: HashiCorp API, registry, and release hosts, or your mirror; Red Hat hop node addresses published for your AAP tenant; AAP controller API; GitHub Enterprise from the ingress agents and from the collection publisher only.</li>
+      <li>Internal allowlist: vCenter from apply agents only; CyberArk CCP from apply agents and execution nodes; guest 22 from execution nodes to the VM subnets they serve; Splunk HEC from the collector.</li>
+      <li>NTP on every worker. TLS to HCP fails if the clock is wrong, and the failure looks like a token problem.</li>
+      <li>If a proxy is mandatory for HashiCorp, set <code>HTTPS_PROXY</code> on the Terraform agents and <code>NO_PROXY</code> for vCenter, CyberArk, and GitHub Enterprise hostnames. Do not send the AAP mesh through that proxy.</li>
+    </ol>
+    <p>Verify: from an apply agent, <code>curl -I https://app.terraform.io</code> returns a TLS handshake you can inspect, and the certificate chain is the public one, not your inspection appliance. From an execution node, the same test to the hop hostname. From a user desktop, SSH to an agent is refused.</p>
+  </details>
+
+  <details class="phase">
+    <summary>C7. CyberArk application identities</summary>
+    <ol>
+      <li>Create the safes from the alignment table. One vCenter account object per safe. SSH accounts for baselines are separate objects.</li>
+      <li>Create an application identity per agent role: <code>tfc-apply-nonprod</code>, <code>tfc-apply-prod</code>, <code>tfc-ingress</code>, <code>aap-exec-nonprod</code>, <code>aap-exec-prod</code>.</li>
+      <li>Authenticate with a certificate, not a password in a script argument. The certificate lives on that host, mode 0600, and in the safe.</li>
+      <li>CCP AIM allowlist: the apply identity can read the vCenter object for its environment and cannot read the SSH objects. The execution identity is the reverse. The ingress identity can read only the GitHub publisher credential if it needs one.</li>
+      <li>Dual control on the vCenter production object and on the HCP break-glass safe.</li>
+    </ol>
+    <p>Verify: from a non-production apply agent, a CCP request for the production object is denied. A request for the non-production vCenter object returns a username. Do not write that response to a ticket.</p>
+  </details>
+
+  <details class="phase">
+    <summary>C8. Provider and binary mirror</summary>
+    <ol>
+      <li>Stand up an internal network mirror for Terraform providers and a copy of the pinned Terraform releases, or use the artifact repository you already have.</li>
+      <li>On every apply agent, a CLI configuration points <code>provider_installation</code> at the mirror and excludes direct installs from <code>registry.terraform.io</code>.</li>
+      <li>Approve provider versions the way you approve packages. The first set is the vSphere provider you pin in the module, plus the HCP Terraform provider used only on the control-plane workspace.</li>
+    </ol>
+    <p>Verify: disconnect the agent from the public registry with an egress rule and a plan still initialises using the mirror. Then restore the egress you actually want for HCP itself.</p>
+  </details>
+
+  <details class="phase">
+    <summary>C9. Install the agents</summary>
+    <ol>
+      <li>Build three pairs of RHEL or another supported Linux: ingress, non-production apply, production apply. Four vCPU and 8 GB is a starting size for apply. Ingress can be smaller; HashiCorp asks for extra memory when request forwarding is on, on the order of a few hundred megabytes above the 2 GB base, and disk of at least twice your largest repository.</li>
+      <li>Create a service account <code>tfcagent</code> with no sudo and no login shell beyond the service.</li>
+      <li>In HCP, create a token for each pool. Store it in the matching CyberArk object. The UI shows the token once.</li>
+      <li>Install the current <code>tfc-agent</code> at or above the version the private-VCS doc requires (1.15 for workspace ingress, 1.21.1 for request forwarding). Pin it. Do not track “latest” from a laptop.</li>
+      <li>Ingress unit: request forwarding on, accept <code>ingress</code> only. Apply units: accept <code>plan,apply,policy,assessment</code>, request forwarding off, environment file populated by the CyberArk timer for vCenter.</li>
+      <li>systemd restarts on failure. Journald goes to Splunk via the forwarder.</li>
+    </ol>
+    <p>Verify: HCP shows two agents idle in each pool. Stop one agent and a trivial remote plan still starts on the other. The ingress host has no <code>VSPHERE_PASSWORD</code> in its environment. The apply host’s process list does not show the password; it is in the environment file, which is mode 0600 and owned by root.</p>
+  </details>
+
+  <details class="phase">
+    <summary>C10. Prove an agent with a workspace that creates nothing</summary>
+    <ol>
+      <li>A workspace in <code>vmware-nonprod</code>, execution mode agent, pool <code>vmware-nonprod</code>, configuration is a single <code>terraform_data</code> or output. No vSphere provider yet.</li>
+      <li>Queue a run. Confirm the agent log names that run id.</li>
+      <li>Repeat on the production pool with a second empty workspace.</li>
+      <li>Delete these workspaces when the real module works, so they do not look like abandoned VMs. <code>terraform_data</code> does not count as a managed resource, but empty workspaces confuse operators.</li>
+    </ol>
+    <p>Verify: the run status is applied, the agent name on the run matches the host you intended, and the other pool did not take the run.</p>
+  </details>
+
+  <details class="phase">
+    <summary>C11. vCenter role and the first real clone</summary>
+    <ol>
+      <li>Create a vCenter role that can clone from the approved template folder into a sandbox folder and cannot change permissions, roles, or unrelated folders.</li>
+      <li>Bind the non-production CyberArk account to that role on the non-production objects only.</li>
+      <li>Publish the first module version, even if the portal does not exist yet. Inputs: template, folder, cluster, datastore, port group, CPU, memory, hostname. Provider block empty.</li>
+      <li>Drive one workspace by hand, or with the API from a platform laptop using a personal token that you then revoke. Hostname in the sandbox pattern. Custom attributes include a fake <code>request_id</code>.</li>
+      <li>Confirm the guest boots and gets a DHCP address.</li>
+    </ol>
+    <p>Verify: the VM exists only in the sandbox folder. A plan that targets a production folder with the non-production account fails at vCenter, not only in policy. Destroy the VM with a destroy plan before you continue. State in HCP matches vCenter.</p>
+  </details>
+
+  <details class="phase">
+    <summary>C12. Private module flow</summary>
+    <ol>
+      <li>Preferred: register GitHub Enterprise as a private VCS provider, select the <code>private-ingress</code> pool, and finish the GitHub OAuth or GitHub App handshake from the HCP screen. The agent must be able to reach GitHub Enterprise on 443.</li>
+      <li>Publish the module repository to the private registry with a Git tag. Pin consumers to a version.</li>
+      <li>Confirm a speculative plan runs when you open a pull request. That plan should use the ingress path for the clone and the apply pool for Terraform. If both happen on the ingress agent, the accept list is wrong. Stop and fix it.</li>
+      <li>Fallback if private VCS is not entitled: a self-hosted runner vendors the module into a configuration-version tarball and uploads it with the API. You still get remote apply. You do not get native pull-request checks until CI posts them.</li>
+    </ol>
+    <p>Verify: kill the ingress agents and a VCS-triggered plan fails cleanly. Start them and it recovers. Apply agents were up the whole time and did not clone GitHub themselves.</p>
+  </details>
+
+  <details class="phase">
+    <summary>C13. Policy</summary>
+    <ol>
+      <li>Repository <code>platform-governance</code>. OPA policies: resource type allowlist, hostname pattern, CPU and memory ceilings, and a deny for any workspace in the production project that adds a second NIC or a disk above the catalogue.</li>
+      <li>Attach the policy set to <code>vmware-nonprod</code> and <code>vmware-prod</code> as a hard-mandatory check. Advisory mode for one week in non-production is acceptable. Production starts mandatory.</li>
+      <li>Platform admins may override only where the policy is marked soft. The override is an audit event. CPU ceilings are hard.</li>
+    </ol>
+    <p>Verify: a plan with 64 CPUs fails policy and does not apply. A plan that matches the catalogue passes. The failure text is something a developer can read, because the portal will show it.</p>
+  </details>
+
+  <details class="phase">
+    <summary>C14. Ansible Automation Platform and the mesh</summary>
+    <ol>
+      <li>Complete Red Hat’s onboarding for AAP Service on AWS. Record the controller URL, the two hop hostnames, and the tenant’s egress notes.</li>
+      <li>Build four RHEL execution nodes from the included entitlements. Patch them. Install the execution-plane packages Red Hat’s current mesh document specifies for your version. Do not improvise a container build.</li>
+      <li>Register two nodes into instance group <code>ig-vmware-nonprod</code> and two into <code>ig-vmware-prod</code>. Peer each node to both hosted hop nodes using the pull model.</li>
+      <li>Confirm the mesh status is ready and that a job placed on the non-production group never lands on a production node. Use the instance group on the job template, not a hope.</li>
+      <li>Create an organisation, a project or a collection source, an inventory per environment, and a machine credential of type CyberArk lookup.</li>
+      <li>A tiny job template runs <code>ansible.builtin.ping</code> against a sandbox VM you still have, or against a new one you clone for this test.</li>
+    </ol>
+    <p>Verify: with one execution node stopped, the ping job still runs on the other in the same group. The production group does not take it. The controller log shows the job on your node, not on the Red Hat control plane. TLS inspection is still off; if the mesh flaps, this is the first place to look.</p>
+  </details>
+
+  <details class="phase">
+    <summary>C15. Baseline and content distribution</summary>
+    <ol>
+      <li>Roles: access, DNS record, time, Splunk forwarder, estate baseline, <code>/etc/infra-id</code>. Keep them in GitHub Enterprise.</li>
+      <li>A self-hosted runner publishes a versioned collection to the managed Automation Hub. The job template pins that version.</li>
+      <li>Workflow template <code>baseline-linux-np</code> and <code>baseline-linux-pr</code>. Each is locked to its instance group and its credential.</li>
+      <li>Launch by hand against the sandbox VM. Then launch again and confirm the playbook is safe to run twice. The portal will retry it.</li>
+    </ol>
+    <p>Verify: the guest has the forwarder and the request id file. A second run changes nothing and reports ok. The SSH password is not in the job extra vars. AAP resolved it through CyberArk.</p>
+  </details>
+
+  <details class="phase">
+    <summary>C16. Splunk collector</summary>
+    <ol>
+      <li>Create indexes <code>hcp_audit</code>, <code>hcp_runs</code>, <code>aap_audit</code>, <code>portal_audit</code>, <code>hcp_agent</code>. Retention matches the company’s audit policy, and it is longer than 14 days.</li>
+      <li>Create an HEC token that can write those indexes and nothing else. Store it in CyberArk.</li>
+      <li>In HCP, organisation settings, create an audit-trail token. Store it in CyberArk. This token is not a team token and not an organisation token.</li>
+      <li>Deploy the collector on a host that can reach HCP and the HEC. Checkpoint on disk. Poll the audit API once a minute. Fetch run logs only for terminal runs, inside the API budget you reserved (a sensible start is under 10 of the 30 requests per minute).</li>
+      <li>Alert in Splunk if the checkpoint timestamp is older than 30 minutes.</li>
+      <li>Forward agent and execution-node journals with the Universal Forwarder.</li>
+    </ol>
+    <p>Verify: apply the empty workspace again. Within a few minutes the audit event is searchable in <code>hcp_audit</code> and contains the actor. The plan stdout, if you archived it, does not contain the vCenter password. Stop the collector, wait past your alert threshold, and confirm the alert fires. Start it and confirm it catches up. Do not leave it stopped for days.</p>
+  </details>
+
+  <details class="phase">
+    <summary>C17. Portal on the estate</summary>
+    <ol>
+      <li>Two VMs, internal load balancer, TLS certificate from the company CA, PostgreSQL with backups. The portal is not on the OpenShift you have postponed.</li>
+      <li>Configure OIDC against <code>idp-portal</code>. Session cookie is Secure, HttpOnly, SameSite. Idle timeout is a working day or shorter.</li>
+      <li>The portal reads the non-production team token and the AAP token from CyberArk at start and on a timer. It does not read the production apply permission. It can queue a production plan with the plan-only team token.</li>
+      <li>Catalogue table loaded with one non-production Linux item: module version, pool <code>vmware-nonprod</code>, instance group <code>ig-vmware-nonprod</code>, workflow id, size menu, network list, quota.</li>
+      <li>Idempotency key on submit. Hostname allocator is a database sequence, not a Terraform random string.</li>
+      <li>Status updates come from the collector’s audit pass plus a direct poll of AAP for the one job id you launched. The portal does not list every workspace.</li>
+    </ol>
+    <p>Verify: a user without the Requester role gets a forbidden page. A user with the role can submit. Two clicks do not create two VMs. A platform admin can change quota and the change appears in <code>portal_audit</code>.</p>
+  </details>
+
+  <details class="phase">
+    <summary>C18. End-to-end non-production, then production</summary>
+    <ol>
+      <li>Submit a sandbox catalogue request as a normal user. Watch the portal status move, the HCP run, the vCenter task, the AAP job, and a Splunk search on <code>request_id</code>.</li>
+      <li>Kill the baseline on purpose, for example by pointing DNS at a name you cannot write. Confirm status <code>config_failed</code> and that retry does not clone a second VM.</li>
+      <li>Fix it, retry, reach <code>active</code>.</li>
+      <li>Decommission. Confirm the retire path: Ansible retire job if you have one, Terraform destroy, AAP host deleted, DNS removed, portal row kept as <code>destroyed</code>.</li>
+      <li>Only after that, a production catalogue item in a production sandbox if you have one. The portal stops at “plan ready”. A different person opens the deep link, signs in with Entra, and applies. The audit event’s actor is that person, not the portal team.</li>
+      <li>Attempt to approve your own production request with a second role on the same account. The portal blocks it.</li>
+    </ol>
+    <p>Verify: each of the searches below returns the same <code>request_id</code>: portal row, HCP run, AAP job, Splunk, and <code>/etc/infra-id</code> on the guest before you destroy it.</p>
+  </details>
+
+  <details class="phase">
+    <summary>C19. Drift, windows, and day-2</summary>
+    <ol>
+      <li>If the edition includes health assessments, enable them on production workspaces and route the notification into the collector. If it does not, schedule a plan-only run weekly per production workspace, overnight, never all at the same minute. Apply stays off.</li>
+      <li>A drift finding opens a portal banner. It does not auto-apply in production.</li>
+      <li>Day-2 “add data disk” queues a new run on the same workspace with a new variable. It uses the same approval rule as create.</li>
+      <li>Module upgrades are a platform action: change the pinned version on a catalogue item, then upgrade one workspace, then a batch. There is no floating <code>main</code>.</li>
+    </ol>
+    <p>Verify: a by-hand edit in vCenter shows up as drift and does not get silently reverted at 09:00 on a Tuesday while someone is provisioning.</p>
+  </details>
+
+  <details class="phase" id="game">
+    <summary>C20. Game day before you call it live</summary>
+    <ol>
+      <li>Reboot one apply agent during a plan. The run fails or is picked up according to HCP’s behaviour; the surviving agent serves the next run. Confirm you understand which of those two you observed and write it down.</li>
+      <li>Revoke the portal team token and confirm new requests fail closed with a clear error, and existing VMs are untouched.</li>
+      <li>Block egress from an execution node to the hop node. Jobs queue or fail. Restore egress and confirm the mesh recovers without a reinstall.</li>
+      <li>Sign in with break-glass and with SSO.</li>
+      <li>Restore a PostgreSQL backup of the portal to a scratch instance and confirm request history is there. HCP state is still the source of truth for the VM; the portal is the source of truth for who asked.</li>
+    </ol>
+  </details>
+
+  <details class="phase">
+    <summary>C21. Leave stage 2 as names only</summary>
+    <p>Projects <code>azure-landing</code> and <code>ocp-nonprod</code> exist and contain no workspaces. No Azure service principal is created “just in case” inside the company tenant as part of this personal project. When the company is ready, the Azure catalogue item gets workload identity and, only if private endpoints require it, a new agent pool. The OpenShift catalogue item gets its own pool and a namespace module. Neither reuses the vSphere module.</p>
+  </details>
+
+  <h3 id="d0">Track D · Showcase</h3>
+  <p>Do this on a personal tenant. The point of the order is that you see a VM before you build a catalogue, and a catalogue before you add the optional agent.</p>
+
+  <details class="phase" open>
+    <summary>D0. Accounts and a budget</summary>
+    <ol>
+      <li>Personal Azure subscription. Budget alert at a limit you can lose without pain. Resource groups <code>rg-demo-control</code> and <code>rg-demo-workloads</code>.</li>
+      <li>Personal HCP organisation on Free, region recorded. Personal GitHub repository, private is fine.</li>
+      <li>Entra tenant you control. Confirm the user list is only you and any demo accounts you created.</li>
+    </ol>
+    <p>Verify: <code>az account show</code> is the personal subscription. The HCP org name is not the estate org.</p>
+  </details>
+
+  <details class="phase">
+    <summary>D1. Entra app registrations</summary>
+    <ol>
+      <li><code>idp-portal</code> as in C3, with a redirect URI you will use on App Service. Certificate or secret in Key Vault. Prefer a certificate.</li>
+      <li><code>demo-hcp-azure</code> with no client secret. Federated credential subject set to the HCP organisation and project wildcard HashiCorp documents for dynamic credentials. Trust type is the HCP issuer.</li>
+      <li>Grant that app the minimum Azure role on <code>rg-demo-workloads</code> only. It cannot read <code>rg-demo-control</code>.</li>
+    </ol>
+    <p>Verify: the federated credential’s subject matches a workspace you will create in that project. A role assignment on the whole subscription is a mistake. Narrow it before you continue.</p>
+  </details>
+
+  <details class="phase">
+    <summary>D2. Control plane of the demo, by hand once</summary>
+    <ol>
+      <li>When you start implementation, the host resources (App Service plan, Linux Web App, Key Vault, PostgreSQL flexible server or, for a first week, a single database you can afford, VNet, runner VM, user-assigned identities) are a Terraform root applied from your laptop or from an HCP workspace in remote mode.</li>
+      <li>The Web App’s identity can read the Key Vault secrets the portal needs: HCP team token, database URL. The runner’s identity can read the SSH private key and cannot read the HCP token.</li>
+      <li>The workload subnet has no route to a public IP for guests. The runner subnet can reach the guest subnet on 22 and can reach the App Service outbound.</li>
+    </ol>
+    <p>Verify: the site loads over HTTPS, Key Vault firewall allows the Web App and the runner and denies your laptop after you finish bootstrapping, and the workload subnet’s default outbound for guests is unnecessary if they have no public IP. Do not open SSH on a public IP “temporarily”.</p>
+  </details>
+
+  <details class="phase">
+    <summary>D3. HCP workspace pattern for one VM</summary>
+    <ol>
+      <li>Pin Terraform. Create project <code>showcase-dev</code>.</li>
+      <li>Create one workspace by hand, execution mode remote, Azure dynamic credentials pointed at <code>demo-hcp-azure</code>.</li>
+      <li>Configuration is the Azure Linux module at a pinned version: Ubuntu LTS, size on the allowlist, tags include <code>request_id</code>, no public IP, SSH key from a variable marked sensitive that you injected for this first test. After the runner exists, the key comes from Key Vault into the run via the same dynamic pattern or via a variable the portal sets as sensitive. Prefer generating the key in Key Vault and passing the public half only into Terraform.</li>
+      <li>Apply. Confirm the NIC has no public address. Destroy it. You have proved the module without the portal.</li>
+    </ol>
+    <p>Verify: the activity log in Azure shows the federated app, not your user, as the identity that created the VM. If it shows your user, you applied with a local Azure CLI login and you have not proved the HCP path.</p>
+  </details>
+
+  <details class="phase">
+    <summary>D4. Policy on the free org</summary>
+    <ol>
+      <li>Add one policy set with up to five policies: location, size, no public IP, required tags, resource type allowlist.</li>
+      <li>Queue a plan that adds a public IP. It must fail.</li>
+    </ol>
+    <p>Verify: the failure is visible on the run. If the free org refuses the policy API, record that as a product fact and keep the same rules in the portal until you upgrade the org. Do not silently drop the control.</p>
+  </details>
+
+  <details class="phase">
+    <summary>D5. Portal</summary>
+    <ol>
+      <li>Deploy the Python service to the Web App. OIDC in application code so the same binary can later sit on estate VMs. App Service Easy Auth would strand the estate build on an Azure-only login.</li>
+      <li>Tables: catalogue item, request, approval, config job, audit event.</li>
+      <li>One catalogue item. Quota three. Submit creates a workspace via the API, sets variables, starts a run, and polls that run id on a slow backoff.</li>
+      <li>On applied, write a config job row. Do not SSH from the Web App.</li>
+    </ol>
+    <p>Verify: sign-in works. A second submit with the same idempotency key returns the same request. A user without the role cannot submit. The HCP token is not in the page source and not in the Web App application settings as a plaintext value you typed into the portal blade; it is a Key Vault reference or a runtime fetch.</p>
+  </details>
+
+  <details class="phase">
+    <summary>D6. Pull runner</summary>
+    <ol>
+      <li>A small VM in the VNet, managed identity, polls <code>GET /api/jobs/next</code> with its own credential.</li>
+      <li>It runs the baseline playbook against <code>ansible_host</code> equal to the private IP, writes <code>/etc/infra-id</code>, and posts success or failure.</li>
+      <li>The playbook is idempotent.</li>
+    </ol>
+    <p>Verify: stop the runner, create a VM, see the portal sit at <code>configuring</code> or <code>config_failed</code> after the timeout, start the runner, retry, reach <code>active</code>. No second VM.</p>
+  </details>
+
+  <details class="phase">
+    <summary>D7. Audit page, then optional Splunk</summary>
+    <ol>
+      <li>Every submit, approve, run start, apply, config start, config end, and destroy writes an event with <code>request_id</code>, actor, and timestamp.</li>
+      <li>The Audit page filters on that id.</li>
+      <li>If you have a Splunk you are allowed to use, set the HEC URL and token in Key Vault and confirm one event arrives. If you do not, the demo stops at the Audit page and you say so.</li>
+    </ol>
+    <p>Verify: destroy a VM and show the full event list for that <code>request_id</code> from request to destroy.</p>
+  </details>
+
+  <details class="phase">
+    <summary>D8. Optional agent, for the conversation about the estate</summary>
+    <ol>
+      <li>A VM, pool <code>showcase-agent</code>, systemd unit, token in Key Vault, fetched at boot.</li>
+      <li>A catalogue flag selects execution mode agent and this pool.</li>
+      <li>Run one request. Show the agent log polling, then the run executing locally, while Azure authentication is still the federated identity and not a password on the agent.</li>
+      <li>Switch the catalogue flag back to remote when the demo is over, so you do not depend on a single agent staying up.</li>
+    </ol>
+    <p>Verify: while the agent is stopped, a remote-mode request still succeeds, and an agent-mode request waits or fails clearly.</p>
+  </details>
+
+  <details class="phase">
+    <summary>D9. The ten-minute demonstration</summary>
+    <ol>
+      <li>Start signed out. Sign in with Entra.</li>
+      <li>Show the catalogue and the quota.</li>
+      <li>Submit. Open the HCP run in another tab. Open the Azure resource group and show there is no public IP.</li>
+      <li>Open the runner log and then the Audit page.</li>
+      <li>Say the sentence: “On the estate this runner is an AAP execution node, this remote execution is a self-hosted agent next to vCenter, and Key Vault is CyberArk. I am not showing those products today.”</li>
+      <li>Destroy, and show the VM disappear.</li>
+    </ol>
+  </details>
+</section>
+
+<section class="panel" role="tabpanel" id="iac" aria-labelledby="tab-iac" hidden>
+  <h2>IaC blueprint</h2>
+  <p>Reference only. These sketches are the contract for a later change. They are not a module registry, and applying them now would ignore the runbook’s order. When the build starts, each sketch becomes a repository of its own or a directory in one showcase repository. Suggested split:</p>
+  <table>
+    <thead><tr><th>Repository or directory</th><th>Tool</th><th>Owns</th></tr></thead>
+    <tbody>
+      <tr><td>platform-control</td><td>Terraform</td><td>HCP projects, team access, agent pools, policy set attachment. No tokens in state.</td></tr>
+      <tr><td>modules/vsphere-linux-vm</td><td>Terraform</td><td>Estate VM. Empty provider block.</td></tr>
+      <tr><td>modules/azure-linux-vm</td><td>Terraform</td><td>Showcase VM. No public IP.</td></tr>
+      <tr><td>platform-governance</td><td>OPA</td><td>Plan policies.</td></tr>
+      <tr><td>platform-agents</td><td>Bash and systemd</td><td>Agent install, CyberArk timer, CLI mirror config.</td></tr>
+      <tr><td>platform-aap</td><td>Ansible</td><td>Baseline roles and the collection that is published to Automation Hub.</td></tr>
+      <tr><td>portal</td><td>Python</td><td>Catalogue, OIDC, HCP client, ConfigRunner interface.</td></tr>
+      <tr><td>collector</td><td>Python</td><td>Audit pull, run-log archive, HEC, portal status update.</td></tr>
+      <tr><td>showcase-host</td><td>Terraform</td><td>App Service, Key Vault, Postgres, VNet, runner.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Stage: control plane</h3>
+  <p>Remote execution. Provider is the HCP Terraform provider. Import existing projects rather than recreating them. Agent tokens stay out of this state on purpose; the pool resource does not need to create a token.</p>
+<pre><code>resource "tfe_project" "nonprod" {
+  organization = var.organization
+  name         = "vmware-nonprod"
+}
+
+resource "tfe_agent_pool" "nonprod" {
+  name         = "vmware-nonprod"
+  organization = var.organization
+}
+
+resource "tfe_team_project_access" "portal_nonprod" {
+  team_id    = tfe_team.portal_nonprod.id
+  project_id = tfe_project.nonprod.id
+  access     = "custom"
+  project_access {
+    settings = "read"
+    teams    = "none"
+  }
+  workspace_access {
+    runs           = "apply"
+    variables      = "write"
+    state_versions = "read-outputs"
+    sentinel_mocks = "none"
+    run_tasks      = false
+  }
+}</code></pre>
+  <p class="src">The access block’s exact arguments need to match the provider version you pin. The intent is fixed: apply and write variables, read outputs, no state download.</p>
+
+  <h3>Stage: agent host</h3>
+<pre><code># /etc/systemd/system/tfc-agent-nonprod.service
+[Unit]
+Description=HCP Terraform apply agent (vmware-nonprod)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=tfcagent
+Group=tfcagent
+EnvironmentFile=/etc/tfc-agent/nonprod.env
+ExecStart=/usr/local/bin/tfc-agent
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target</code></pre>
+<pre><code># nonprod.env is rendered by the CyberArk timer, mode 0600, not committed.
+# TFC_AGENT_TOKEN=from the pool object
+# TFC_AGENT_NAME=vc-np-a01
+# TFC_ADDRESS=https://app.terraform.io
+# TFC_AGENT_ACCEPT=plan,apply,policy,assessment
+# VSPHERE_USER=
+# VSPHERE_PASSWORD=
+# VSPHERE_SERVER=vcenter.example.internal
+# VSPHERE_ALLOW_UNVERIFIED_SSL=false</code></pre>
+<pre><code>#!/bin/bash
+# Refresh vCenter credentials. Certificate auth to CCP. Restart only on change.
+set -euo pipefail
+umask 077
+tmp=$(mktemp)
+curl -sS --cert /etc/tfc-agent/ccp.pem --key /etc/tfc-agent/ccp.key \
+  --url "https://ccp.example.internal/AIMWebService/api/Accounts" \
+  --get --data-urlencode "AppID=tfc-apply-nonprod" \
+  --data-urlencode "Safe=PLAT-VC-NP" \
+  --data-urlencode "Object=vsphere-automation" \
+  -o "$tmp"
+# Parse UserName and Content, write /etc/tfc-agent/nonprod.env, compare, restart if needed.
+shred -u "$tmp"</code></pre>
+<pre><code># Ingress agent is a different unit. No VSPHERE_* variables.
+# TFC_AGENT_REQUEST_FORWARDING=true
+# TFC_AGENT_ACCEPT=ingress</code></pre>
+<pre><code># Terraform CLI config on apply agents. Providers come from the mirror.
+provider_installation {
+  network_mirror {
+    url = "https://tf-mirror.example.internal/repository/terraform-providers/"
+  }
+  direct {
+    exclude = ["registry.terraform.io/*/*"]
+  }
+}</code></pre>
+
+  <h3>Stage: vSphere module</h3>
+<pre><code>terraform {
+  required_version = "&gt;= 1.10.0"
+  required_providers {
+    vsphere = {
+      source  = "hashicorp/vsphere"
+      version = "2.11.1" # pin the version you have mirrored and approved
+    }
+  }
+}
+
+provider "vsphere" {}
+
+variable "hostname" {
+  type = string
+  validation {
+    condition     = can(regex("^(np|pr)-l-[a-z0-9]+-[0-9]{2}$", var.hostname))
+    error_message = "Hostname must match the estate pattern."
+  }
+}
+
+variable "cpu" {
+  type = number
+  validation {
+    condition     = contains([2, 4, 8], var.cpu)
+    error_message = "CPU must be a catalogue size."
+  }
+}
+
+# data sources look up the approved template, folder, cluster, datastore, and port group
+# by name. Names come from the catalogue item, not from the requester typing an id.
+
+resource "vsphere_virtual_machine" "guest" {
+  name     = var.hostname
+  num_cpus = var.cpu
+  memory   = var.memory_mb
+  # clone, customize, and custom attributes for owner, cost_centre, request_id, managed_by
+}
+
+output "ip" {
+  value = vsphere_virtual_machine.guest.default_ip_address
+}
+
+output "request_id" {
+  value = var.request_id
+}</code></pre>
+
+  <h3>Stage: Azure module for the showcase</h3>
+<pre><code>provider "azurerm" {
+  features {}
+  use_oidc = true
+}
+
+resource "azurerm_network_interface" "guest" {
+  name                = "${var.hostname}-nic"
+  location            = var.location
+  resource_group_name = var.workload_resource_group
+  ip_configuration {
+    name                          = "primary"
+    subnet_id                     = var.subnet_id
+    private_ip_address_allocation = "Dynamic"
+  }
+}
+
+resource "azurerm_linux_virtual_machine" "guest" {
+  name                = var.hostname
+  location            = var.location
+  resource_group_name = var.workload_resource_group
+  size                = var.size
+  admin_username      = "infra"
+  network_interface_ids = [azurerm_network_interface.guest.id]
+  admin_ssh_key {
+    username   = "infra"
+    public_key = var.ssh_public_key
+  }
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "Standard_LRS"
+  }
+  source_image_reference {
+    publisher = "Canonical"
+    offer     = "ubuntu-24_04-lts"
+    sku       = "server"
+    version   = "latest" # pin a version when you leave the sketch
+  }
+  tags = var.tags
+}</code></pre>
+  <p>There is no <code>azurerm_public_ip</code> in this module. Policy and the absence of the resource are both doing the job. Dynamic credentials come from workspace environment variables HCP documents for Azure (<code>TFC_AZURE_PROVIDER_AUTH</code> and the client, subscription, and tenant ids), not from this file.</p>
+
+  <h3>Stage: policy</h3>
+<pre><code>package terraform.policy
+
+import rego.v1
+
+allowed := {
+  "vsphere_virtual_machine",
+  "vsphere_virtual_disk",
+  "terraform_data",
+}
+
+deny contains msg if {
+  some r in input.resource_changes
+  r.mode == "managed"
+  not allowed[r.type]
+  msg := sprintf("%s is not an allowed resource type", [r.type])
+}
+
+deny contains msg if {
+  some r in input.resource_changes
+  r.type == "vsphere_virtual_machine"
+  cpu := r.change.after.num_cpus
+  cpu &gt; 8
+  msg := sprintf("%s requests %d CPUs; catalogue maximum is 8", [r.address, cpu])
+}</code></pre>
+  <p>The showcase set swaps the allowlist for <code>azurerm_linux_virtual_machine</code>, <code>azurerm_network_interface</code>, and <code>azurerm_network_interface_security_group_association</code> if you add one, and adds a deny when a change contains <code>azurerm_public_ip</code>.</p>
+
+  <h3>Stage: baseline playbook</h3>
+<pre><code>---
+- name: Baseline a Linux guest
+  hosts: all
+  become: true
+  tasks:
+    - name: Record the request id
+      ansible.builtin.copy:
+        dest: /etc/infra-id
+        mode: "0644"
+        content: "{{ request_id }}\n"
+    - name: Enable time sync
+      ansible.builtin.service:
+        name: chronyd
+        state: started
+        enabled: true</code></pre>
+  <p>The estate play adds the CyberArk-backed account tasks, the DNS record, and the Splunk forwarder. The showcase play is the file and chrony, which is enough to prove the handoff. Publish the estate play as a collection version. Do not point a job template at a branch.</p>
+
+  <h3>Stage: portal orchestration</h3>
+<pre><code>class ConfigRunner(Protocol):
+    def start(self, request: Request, outputs: Outputs) -&gt; str: ...
+    def status(self, job_id: str) -&gt; str: ...
+
+class AapConfigRunner:
+    """Estate. POST /api/v2/job_templates/{id}/launch/ with limit and extra_vars."""
+
+class PullConfigRunner:
+    """Showcase. Insert a config job row. The runner VM polls for it."""
+
+# Non-production: team token may apply after policy.
+# Production: queue the run and stop. The approver applies in HCP.
+# On config failure: call start() again. Do not create a workspace.</code></pre>
+<pre><code>STATUSES = (
+    "draft", "pending_approval", "rejected",
+    "queued", "planning", "applying",
+    "policy_failed", "apply_failed",
+    "configuring", "config_failed",
+    "active", "destroy_pending", "destroyed", "destroy_failed",
+)</code></pre>
+
+  <h3>Stage: collector</h3>
+<pre><code>AUDIT_URL = "https://app.terraform.io/api/v2/organization/audit-trail"
+
+def pull_audit(since: str) -&gt; list[dict]:
+    # Authorization: Bearer &lt;audit-trail token&gt;
+    # This token cannot plan, apply, or read state.
+    # Page with page[size]=1000 until a short page.
+    ...
+
+def archive_run_logs(run_id: str) -&gt; None:
+    # Team token, read-only on the project.
+    # GET the plan and apply log-read-url, redact, POST to HEC index hcp_runs.
+    # Never GET the state download URL.
+    ...</code></pre>
+  <p>One process does both, so two clients do not double-spend the 30 requests per minute. Checkpoint file is local and is backed up with the collector host. The showcase uses the same event schema and writes Postgres when no HEC is configured.</p>
+
+  <h3>Stage: profile file</h3>
+<pre><code># showcase.profile.yaml and estate.profile.yaml. Secrets are references, never values.
+profile: showcase
+hcp:
+  address: https://app.terraform.io
+  organization: personal-showcase
+  project: showcase-dev
+  execution: remote          # or agent
+  agent_pool: showcase-agent
+azure:
+  subscription_id: ...
+  workload_resource_group: rg-demo-workloads
+  location: uksouth
+runner: pull                 # estate value is aap
+splunk:
+  hec_url: ""                # empty means local audit table only</code></pre>
+</section>
+
+<section class="panel" role="tabpanel" id="risks" aria-labelledby="tab-risks" hidden>
+  <h2>Risks and open points</h2>
+  <table>
+    <thead><tr><th>Risk</th><th>Why it matters</th><th>What we are doing</th></tr></thead>
+    <tbody>
+      <tr><td>Edition and region chosen late</td><td>Private VCS and audit trails are documented as Premium. Europe is a different org. You cannot casually merge them later.</td><td>Question 1 is a purchase gate. Entitlement API is a runbook step before agents.</td></tr>
+      <tr><td>30 API requests per minute</td><td>A portal that lists workspaces will fall over at thousands of VMs, on Premium as well as Free, if the published limit holds.</td><td>Audit stream plus in-flight polls. Ask sales if a contract raises it. Measure before go-live.</td></tr>
+      <tr><td>Audit retention is 14 days</td><td>A collector outage longer than that is a permanent gap.</td><td>Alert at 30 minutes. Splunk is the archive. Game day includes stopping the collector on purpose for a short time.</td></tr>
+      <tr><td>Official Splunk app versus a cluster</td><td>HashiCorp documents the app as unsupported on clustered Splunk Enterprise. The Splunk page has also said Standard includes audit while the plan limits say Premium.</td><td>Own the puller. Trust the entitlement set over the marketing page.</td></tr>
+      <tr><td>TLS inspection</td><td>Breaks the AAP pull mesh even when Terraform’s agent still works through a proxy.</td><td>Question 12 is a build blocker.</td></tr>
+      <tr><td>Private GitHub from two SaaS products</td><td>Solving it for Terraform does not solve AAP project sync, which runs on Red Hat’s control plane.</td><td>Ingress pool for Terraform. Collection publish for Ansible. Confirm execution-node project sync with Red Hat as an optimisation, not a dependency.</td></tr>
+      <tr><td>Secrets in plan logs and in state</td><td>Injecting vCenter credentials on the agent keeps them out of HCP variables. A sloppy output or a provider that stores a password in state puts them back.</td><td>Empty provider block, tiny outputs, portal token cannot download state, run-log redaction, no state in Splunk.</td></tr>
+      <tr><td>One host with both agents</td><td>vCenter power and root-on-guests in one place.</td><td>Separate pools, separate instance groups, separate safes. Same-VM only in a lab.</td></tr>
+      <tr><td>Workspace-per-VM operational load</td><td>The HCP UI will not be how anyone browses 3,000 machines. Drift plans can saturate 10 concurrent agent runs.</td><td>The portal is the inventory. Drift runs overnight. Module version pins stop a surprise rollout.</td></tr>
+      <tr><td>Auto-apply in production</td><td>A team token hides the human in the audit trail.</td><td>Production apply is a person’s click in HCP. Non-production may use the team token.</td></tr>
+      <tr><td>Showcase over-claims</td><td>A polished Azure demo can be mistaken for a vCenter and AAP deployment.</td><td>The claims table and the spoken sentence in D9. Separate organisations.</td></tr>
+      <tr><td>Managed resource cost</td><td>Server count is not the bill. Resource addresses are.</td><td>Measure one plan. The list-price illustration in the estate section is not a quote.</td></tr>
+      <tr><td>Free-tier policy wording</td><td>The overview both includes policy on Free and dashes it out in the comparison table. A note then says one set of five policies.</td><td>Showcase tries the five. Portal quota exists either way.</td></tr>
+      <tr><td>SSO lockout</td><td>Requiring SSO before break-glass is tested strands the organisation.</td><td>C4 before any “required” switch. Annual test.</td></tr>
+      <tr><td>Image and IPAM unknowns</td><td>DHCP and an existing template process are assumptions. A production network that requires static reservations changes the module.</td><td>Questions 6 and 14. The catalogue item has a slot for the address source.</td></tr>
+      <tr><td>OpenShift and Azure landing zones</td><td>Designing them now in detail would fake requirements you said are later.</td><td>Reserved projects and a written rule: new catalogue item, new module, new pool only if the API is private.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Sources</h3>
+  <ul>
+    <li><a href="https://developer.hashicorp.com/terraform/cloud-docs/agents">HCP Terraform agents</a></li>
+    <li><a href="https://developer.hashicorp.com/terraform/cloud-docs/vcs/private">Private VCS through an agent</a></li>
+    <li><a href="https://developer.hashicorp.com/terraform/cloud-docs/agents/request-forwarding">Request forwarding, and isolating it from workloads</a></li>
+    <li><a href="https://developer.hashicorp.com/terraform/cloud-docs/overview">Plan comparison, managed resources, the 30 request per minute limit, the five-policy note</a></li>
+    <li><a href="https://developer.hashicorp.com/terraform/cloud-docs/api-docs/audit-trails">Audit trails API, 14-day retention, token type</a></li>
+    <li><a href="https://developer.hashicorp.com/terraform/cloud-docs/integrations/splunk">HCP Terraform for Splunk, and the clustered-Enterprise limitation</a></li>
+    <li><a href="https://developer.hashicorp.com/hcp/docs/waypoint">HCP Waypoint</a></li>
+    <li><a href="https://docs.redhat.com/en/documentation/ansible_on_clouds/2.x/html/red_hat_ansible_automation_platform_service_on_aws/saas-pull-push">AAP Service on AWS, pull and push</a></li>
+    <li><a href="https://docs.redhat.com/en/documentation/ansible_on_clouds/2.x/html/red_hat_ansible_automation_platform_service_on_aws/saas-service-definition">AAP service definition: hosted hop nodes, entitlements, execution plane</a></li>
+  </ul>
+  <p>Next step is your answers to the questions, not a repository of Terraform. After that, implementation starts on Track D.</p>
+</section>
+</main>
+<footer class="footer">Infrastructure automation design guide. Design only. Placeholders use example.internal. Checked against public HashiCorp and Red Hat docs on 22 October 2026.</footer>
+<script>
+(function () {
+  var tabs = [].slice.call(document.querySelectorAll('[role="tab"]'));
+  var panels = [].slice.call(document.querySelectorAll('[role="tabpanel"]'));
+  function activate(id, focus) {
+    tabs.forEach(function (t) {
+      var on = t.getAttribute('aria-controls') === id;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      if (on && focus) t.focus();
+    });
+    panels.forEach(function (p) { p.hidden = p.id !== id; });
+    if (history.replaceState) history.replaceState(null, '', '#' + id);
+  }
+  tabs.forEach(function (t) {
+    t.addEventListener('click', function () { activate(t.getAttribute('aria-controls'), false); });
+  });
+  var list = document.querySelector('[role="tablist"]');
+  list.addEventListener('keydown', function (e) {
+    var i = tabs.indexOf(document.activeElement);
+    if (i < 0) return;
+    var n = null;
+    if (e.key === 'ArrowRight') n = (i + 1) % tabs.length;
+    if (e.key === 'ArrowLeft') n = (i - 1 + tabs.length) % tabs.length;
+    if (n === null) return;
+    e.preventDefault();
+    activate(tabs[n].getAttribute('aria-controls'), true);
+  });
+  var hash = (location.hash || '').replace('#', '');
+  var known = panels.some(function (p) { return p.id === hash; });
+  activate(known ? hash : 'overview', false);
+})();
+</script>
+</body>
+</html>
