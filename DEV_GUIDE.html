@@ -289,7 +289,7 @@
   </table>
 
   <h3>Decisions from 22 October 2026</h3>
-  <p>These replace the earlier working assumptions. Two items are still open. The rest of this guide is written to this table.</p>
+  <p>These replace the earlier working assumptions. Workspace size is still provisional. The rest of this guide is written to this table.</p>
   <table>
     <thead><tr><th></th><th>Your answer</th><th>What the design now does</th></tr></thead>
     <tbody>
@@ -298,7 +298,7 @@
       <tr><td>3</td><td><span class="pill decided">Decided</span> C, GitHub pull request</td><td>The portal opens the pull request as the requester. The request file is YAML. A required check posts the Terraform plan onto the pull request. Merge is what authorises apply. The named humans are the GitHub reviewers. HCP’s audit actor is the group token. Splunk joins them with <code>request_id</code>.</td></tr>
       <tr><td>4</td><td><span class="pill decided">Decided</span> C, manager, plus platform for production</td><td>Nothing is auto-approved. The portal reads the manager from Microsoft Graph and requests that person as the reviewer. Production also requires the platform CODEOWNERS team. A missing manager blocks submit. Every manager needs a GitHub Enterprise account linked to the same Entra user.</td></tr>
       <tr><td>5</td><td><span class="pill open">Open</span></td><td>You were not sure. The guide explains the three shapes below and keeps <strong>one workspace per request</strong> as the provisional design, because day-2 resize and decommission are per machine. Say if you want that overturned.</td></tr>
-      <tr><td>6</td><td><span class="pill open">Open</span></td><td>Explained in the questions tab. The runbook stops before IPAM is built. ServiceNow needs a stable address, so “DHCP and hope” is not the silent default.</td></tr>
+      <tr><td>6</td><td><span class="pill decided">Decided</span> A, DHCP reservation, then DNS</td><td>No new IPAM product. The existing DHCP service gets a reservation for the VM’s MAC before the guest is powered on, so the address cannot be given to something else. Ansible writes the A and PTR records after the guest is using that address. ServiceNow is written only after DNS matches. The showcase equivalent is Azure’s subnet address, which stays with the NIC, plus a private DNS record.</td></tr>
       <tr><td>7</td><td><span class="pill decided">Decided</span> C, Entra from day one</td><td>On vSphere this is Azure Arc plus the Entra SSH login extension, not a laptop-style Entra join and not an Active Directory domain. On the showcase Azure VM it is the same login extension without Arc. A CyberArk local account remains for when Azure cannot be reached.</td></tr>
       <tr><td>8</td><td><span class="pill decided">Decided</span> A, CyberArk CCP</td><td>Certificate per worker role. vCenter password injected on the apply agent. AAP uses the CCP credential plugin.</td></tr>
       <tr><td>9</td><td><span class="pill decided">Decided</span> A, clustered Splunk</td><td>Our puller into HEC. Indexes now include GitHub audit, because the pull request is the approval record. State files are not indexed.</td></tr>
@@ -349,7 +349,7 @@
 
 <section class="panel" role="tabpanel" id="questions" aria-labelledby="tab-questions" hidden>
   <h2>Questions</h2>
-  <p>The option cards are the menu. Your answers are in the decision log on the Overview tab. Two questions are still open, and they are written out in full here.</p>
+  <p>The option cards are the menu. Your answers are in the decision log on the Overview tab. Workspace size is the only item still provisional.</p>
 
   <article class="q" id="q1">
     <h3>1. Where does the HCP Terraform organisation live, and which edition is the estate buying?</h3>
@@ -408,10 +408,10 @@
 
   <article class="q" id="q6">
     <h3>6. Where do IP addresses and DNS records come from?</h3>
-    <p><span class="pill open">Open</span> You asked for each option in plain terms. Nothing is selected. ServiceNow is the CMDB, so the address that lands in the CI has to be the address the guest actually keeps.</p>
+    <p><span class="pill decided">Decided</span> 6A. The safe form of DHCP: a reservation in the DHCP service you already run, then DNS. The other options stay here so the choice is still visible.</p>
     <div class="options">
-      <article class="opt">
-        <h4>A. DHCP, then DNS</h4>
+      <article class="opt rec">
+        <h4><span class="pill decided">Decided</span> A. DHCP reservation, then DNS</h4>
         <p>The NIC asks the existing DHCP service for an address. After VMware Tools reports that address, Ansible writes the A record. You are not buying a new product.</p>
         <p>A lease is not a promise. Laptops work this way because they can change address. A server in ServiceNow, and any firewall rule aimed at it, cannot. The version of A that is safe is a <strong>reservation</strong>: the DHCP server is told this MAC always receives this IP, and that reservation is created by an API before or as the VM boots. Plain DHCP, with no reservation, will eventually hand the address to something else.</p>
         <p>DNS happens after boot, so there is a gap where the VM exists and the name does not. The CI is written only after that gap closes. If the scope is full, the VM boots with no address and the request sits in configuring.</p>
@@ -429,14 +429,7 @@
         <p>Choose C when there is no Infoblox or BlueCat and production servers are not allowed to take a random lease. Prefer NetBox over phpIPAM if you want an audit trail on who allocated an address. The orphan-address failure is the same as B.</p>
       </article>
     </div>
-    <p>How to choose, once you know what already exists:</p>
-    <ul>
-      <li>Infoblox or BlueCat is already there: answer <strong>6B</strong>.</li>
-      <li>NetBox or phpIPAM is already there: answer <strong>6C</strong>, and keep ServiceNow as the CMDB.</li>
-      <li>Neither exists, and the network team will allow an API reservation on the current DHCP: answer <strong>6A</strong>.</li>
-      <li>Neither exists, and they will not: answer <strong>6C</strong> and stand up NetBox for addresses only.</li>
-    </ul>
-    <p>Until you answer, the catalogue has an address-source slot and the runbook does not build an allocator.</p>
+    <p>The reservation is created from the execution node, using a CyberArk CCP identity that can only create and delete reservations in the server scopes named by the catalogue. The Terraform agent does not hold that credential. The product behind the API is whatever already serves those VLANs. If that service has no API, 6A cannot be built as written and the network team has to provide one, or the choice has to be reopened.</p>
   </article>
 
   <article class="q" id="q7">
@@ -536,7 +529,7 @@
 
   <div class="callout warn">
     <strong class="k">Still open</strong>
-    Question 5 stays “one workspace per request” unless you say otherwise. Question 6 needs the name of the IP system you already run, or a choice from the list above.
+    Question 5 stays “one workspace per request” unless you say otherwise. Question 6 is DHCP reservation, then DNS.
   </div>
 </section>
 
@@ -645,9 +638,10 @@
       <tr><td>3</td><td>Portal</td><td>Allocates <code>request_id</code> and a hostname. Opens a pull request as the requester, containing only <code>request.yaml</code>. Requests the manager as reviewer. A check runs a Terraform plan and comments on the pull request.</td></tr>
       <tr><td>4</td><td>Manager</td><td>Reads the YAML and the plan comment. Approves. GitHub will not accept the requester’s own approval. Merge authorises the change. The pull request is the approval record.</td></tr>
       <tr><td>5</td><td>Portal</td><td>Sees the merge. Creates one workspace in <code>vmware-nonprod</code> if this request does not have one. Execution mode is set on the workspace, because HCP Europe does not allow a project-level execution mode. Pool <code>vmware-nonprod</code>. Module version pinned. The group token queues the apply.</td></tr>
-      <tr><td>6</td><td>Apply agent</td><td>Polls <code>app.eu.terraform.io</code>. Uses the vCenter account refreshed from CyberArk CCP. Clones the pinned Packer template.</td></tr>
-      <tr><td>7</td><td>Portal</td><td>Reads outputs, not the state file. Launches the baseline on instance group <code>ig-vmware-nonprod</code>. The baseline enrolls Azure Arc, installs Entra SSH login, writes <code>/etc/infra-id</code>, and writes DNS once question 6 has an answer.</td></tr>
-      <tr><td>8</td><td>Portal</td><td>Creates or updates the ServiceNow CI with hostname, address, owner, <code>request_id</code>, workspace id, and Arc resource id. Status becomes <code>active</code> only after that write succeeds.</td></tr>
+      <tr><td>6</td><td>Apply agent</td><td>Polls <code>app.eu.terraform.io</code>. Uses the vCenter account refreshed from CyberArk CCP. Clones the pinned Packer template and leaves the guest powered off. The MAC is an output.</td></tr>
+      <tr><td>7</td><td>Portal</td><td>Reads the MAC from outputs. Launches a short AAP job that creates a DHCP reservation for that MAC in the catalogue scope and returns the address. The guest is still powered off.</td></tr>
+      <tr><td>8</td><td>Portal</td><td>Sets power on and applies again. The guest receives the reserved address. The baseline then writes the A and PTR records, enrolls Azure Arc, installs Entra SSH, and writes <code>/etc/infra-id</code>.</td></tr>
+      <tr><td>9</td><td>Portal</td><td>Creates or updates the ServiceNow CI only after the guest address, the reservation, and DNS all match. The CI includes hostname, address, owner, <code>request_id</code>, workspace id, and Arc resource id. Status becomes <code>active</code> only after that write succeeds.</td></tr>
     </tbody>
   </table>
   <p>Production uses the same path and also requires an approval from the platform team on the pull request. Merge still authorises apply. The group token is the actor inside HCP. The manager and the platform reviewer are the actors inside GitHub, and both streams land in Splunk under the same <code>request_id</code>.</p>
@@ -658,13 +652,14 @@
     <tbody>
       <tr><td>draft</td><td>Not submitted</td><td>Edit</td></tr>
       <tr><td>pending_approval</td><td>Pull request open, waiting for the manager, and for platform if production</td><td>Expires after five business days, then the portal closes the pull request</td></tr>
+      <tr><td>address_failed</td><td>Reservation, power-on address, or DNS did not match</td><td>Fix that step. Do not clone a second VM. Release the reservation if the request is abandoned</td></tr>
       <tr><td>cmdb_failed</td><td>Guest is configured and ServiceNow rejected the write</td><td>Retry the CI write only</td></tr>
       <tr><td>rejected</td><td>Approver rejected</td><td>New request</td></tr>
       <tr><td>queued / planning / applying</td><td>HCP run in flight</td><td>Do not start a second run for the same request</td></tr>
       <tr><td>policy_failed / apply_failed</td><td>No baseline will run</td><td>Fix inputs or the platform fault, queue one new run on the same workspace</td></tr>
       <tr><td>configuring</td><td>VM exists, baseline in flight</td><td>If it fails, <code>config_failed</code>. Retry Ansible only</td></tr>
       <tr><td>active</td><td>Handed to the requester</td><td>Day-2 actions</td></tr>
-      <tr><td>destroy_pending / destroyed / destroy_failed</td><td>Decommission</td><td>Retire job, Terraform destroy, remove AAP host, remove DNS. Keep the portal row</td></tr>
+      <tr><td>destroy_pending / destroyed / destroy_failed</td><td>Decommission</td><td>Delete DNS, release the DHCP reservation, retire the CI, remove Arc, Terraform destroy, remove the AAP host. Keep the portal row</td></tr>
     </tbody>
   </table>
 
@@ -711,9 +706,22 @@
   <table>
     <thead><tr><th>Terraform</th><th>Ansible baseline</th><th>Neither, in version 1</th></tr></thead>
     <tbody>
-      <tr><td>Folder, clone of a pinned Packer template, CPU, memory, disks, NIC, port group, customisation, custom attributes. Resize and extra disks on later applies.</td><td>Arc enrollment, Entra SSH extension, DNS once question 6 is answered, time sync, Splunk forwarder, baseline, <code>/etc/infra-id</code>. Filesystem grow after a new disk.</td><td>OpenShift namespaces. Backup-product restore until you name the backup product. Patching, which is Azure Update Manager on the Arc machine rather than a second tool.</td></tr>
+      <tr><td>Folder, clone of a pinned Packer template, CPU, memory, disks, NIC, port group, customisation, custom attributes. The first apply leaves the guest powered off so the MAC is known. A second apply powers it on after the reservation exists. Resize and extra disks on later applies.</td><td>DHCP reservation from the execution node before power-on. After boot: A and PTR records, Arc enrollment, Entra SSH extension, time sync, Splunk forwarder, baseline, <code>/etc/infra-id</code>. Filesystem grow after a new disk.</td><td>A new IPAM product. OpenShift namespaces. Backup-product restore until you name the backup product. Patching, which is Azure Update Manager on the Arc machine.</td></tr>
     </tbody>
   </table>
+
+  <h3>Addresses</h3>
+  <p>The catalogue network name maps to a DHCP scope and a DNS zone. The developer never sees a scope id. The platform team maintains that map.</p>
+  <ol>
+    <li>Terraform creates the NIC and the VM, powered off. vSphere assigns the MAC at create time.</li>
+    <li>An AAP job on the environment’s execution node calls the existing DHCP service and reserves that MAC. The reservation’s hostname is the catalogue hostname. The job returns the address. Credentials come from CyberArk CCP, safe <code>PLAT-DHCP</code>, and can only touch the server scopes in the map.</li>
+    <li>A second apply powers the guest on. Guest customisation leaves the NIC on DHCP. The server offers the reserved address.</li>
+    <li>The baseline writes the A and PTR records in the DNS zone for that network, then continues with Arc and Entra SSH.</li>
+    <li>ServiceNow is updated only when the guest address, the reservation, and DNS are the same value.</li>
+  </ol>
+  <p>If the reservation is created and the later steps fail, the portal keeps the MAC and the address on the request row and retries from the failed step. Abandoning the request releases the reservation and deletes any DNS record that was written. A guest that comes up with a different address is <code>address_failed</code>. It is not handed to the requester.</p>
+  <p>The guest subnet already speaks DHCP to the server. What is new is the management call from the execution node to the DHCP and DNS APIs. The network team names those endpoints during C6. The first adapter to write is the one for the DHCP product they name. Windows DHCP and Windows DNS are the usual pair, and they are not assumed until someone confirms them.</p>
+  <p>On the showcase, Azure keeps a dynamic private address for the life of the NIC. The portal writes a private DNS A record after apply. There is no on-prem DHCP API in that profile.</p>
 
   <h3>Pull request, not a second approval click</h3>
   <p>The portal is the form. GitHub Enterprise is the record. The file the reviewer sees is YAML.</p>
@@ -759,7 +767,7 @@ manager: "sam@example.internal"</code></pre>
       <tr><td>Add a user</td><td>Pull request</td><td>Add the person to the service’s Entra group. No local account is created.</td></tr>
       <tr><td>Patch now</td><td>Pull request, manager is enough</td><td>Azure Update Manager on the Arc machine. AAP does not become a second patching product.</td></tr>
       <tr><td>Restore</td><td>Pull request, platform always</td><td>If the source is one of our snapshots and it is inside the 72 hours, AAP reverts it. The plan comment says the revert is destructive. Restore from a backup product waits until you name that product, and until then it is a ServiceNow change, not a button that pretends to work.</td></tr>
-      <tr><td>Decommission</td><td>Pull request, platform for production</td><td>Retire the CI, remove the Arc machine, Terraform destroy, remove DNS, remove the AAP host, keep the portal row.</td></tr>
+      <tr><td>Decommission</td><td>Pull request, platform for production</td><td>Delete the DNS records, release the DHCP reservation, retire the CI, remove the Arc machine, Terraform destroy, remove the AAP host, keep the portal row.</td></tr>
     </tbody>
   </table>
 
@@ -922,8 +930,8 @@ manager: "sam@example.internal"</code></pre>
   <table>
     <thead><tr><th>Environment</th><th>HCP pool</th><th>AAP instance group</th><th>CyberArk safe</th><th>vCenter role</th></tr></thead>
     <tbody>
-      <tr><td>Non-production</td><td>vmware-nonprod</td><td>ig-vmware-nonprod</td><td>PLAT-VC-NP and PLAT-SSH-NP</td><td>Clone into non-production folders only</td></tr>
-      <tr><td>Production</td><td>vmware-prod</td><td>ig-vmware-prod</td><td>PLAT-VC-PR and PLAT-SSH-PR</td><td>Clone into production folders only</td></tr>
+      <tr><td>Non-production</td><td>vmware-nonprod</td><td>ig-vmware-nonprod</td><td>PLAT-VC-NP, PLAT-SSH-NP, and the non-production scopes in PLAT-DHCP</td><td>Clone into non-production folders only. DHCP identity can only reserve in those scopes</td></tr>
+      <tr><td>Production</td><td>vmware-prod</td><td>ig-vmware-prod</td><td>PLAT-VC-PR, PLAT-SSH-PR, and the production scopes in PLAT-DHCP</td><td>Clone into production folders only. DHCP identity can only reserve in those scopes</td></tr>
       <tr><td>Image build</td><td>none, this is a GitHub runner</td><td>none</td><td>PLAT-VC-IMAGE</td><td>Template folder only</td></tr>
     </tbody>
   </table>
@@ -938,7 +946,7 @@ manager: "sam@example.internal"</code></pre>
       <tr><td>HCP Europe VCS egress</td><td>GitHub Enterprise</td><td>443</td><td>Allowlist only. Refresh the published ranges daily</td></tr>
       <tr><td>AAP control plane egress</td><td>GitHub Enterprise</td><td>443</td><td>Allowlist the ranges Red Hat gives you for the tenant</td></tr>
       <tr><td>Execution node</td><td>Hosted hop nodes</td><td>443 out</td><td>Pull mesh. No TLS inspection</td></tr>
-      <tr><td>Execution node</td><td>Guests, CCP, DNS, Azure Arc endpoints</td><td>22, 443, 53</td><td>Baseline, secrets, name, enrollment</td></tr>
+      <tr><td>Execution node</td><td>Guests, CCP, DHCP and DNS management APIs, Azure Arc endpoints</td><td>22, 443, and the DHCP API port the network team documents</td><td>Reservation before power-on, DNS after boot, baseline, enrollment</td></tr>
       <tr><td>Portal namespace</td><td>HCP Europe, AAP API, GitHub, Graph, ServiceNow</td><td>443 out</td><td>Pull requests, runs, CI records</td></tr>
       <tr><td>Collector</td><td>HCP audit API and Splunk HEC</td><td>443 out, HEC as deployed</td><td>Archive. HCP keeps audit events for 14 days</td></tr>
     </tbody>
@@ -1018,7 +1026,7 @@ manager: "sam@example.internal"</code></pre>
   <details class="phase" open>
     <summary>C0. Freeze the decisions that change the buy</summary>
     <ol>
-      <li>The decision log is the record. Still get an answer to question 6, and confirm question 5 stays one workspace per request.</li>
+      <li>The decision log is the record. Question 6 is a DHCP reservation before power-on, then DNS. Confirm question 5 stays one workspace per request, and ask the network team which DHCP and DNS products expose the reservation API.</li>
       <li>TLS inspection stays off the agent, execution-node, and portal egress. That decision is already A.</li>
       <li>Ask HashiCorp sales for HCP Europe Premium. Take a measured resource count. Ask them to confirm audit logging, agents, policy, dynamic credentials to Azure, and the 30 request per minute limit. Ask for the Europe VCS IP ranges endpoint.</li>
       <li>Book AAP on AWS with pull connectivity and the tenant’s egress ranges for the GitHub allowlist. Four execution nodes fit in the published 10 RHEL entitlements.</li>
@@ -1092,7 +1100,7 @@ manager: "sam@example.internal"</code></pre>
   <details class="phase">
     <summary>C7. CyberArk application identities</summary>
     <ol>
-      <li>Create the safes from the alignment table. One vCenter account object per safe. SSH accounts for baselines are separate objects.</li>
+      <li>Create the safes from the alignment table. One vCenter account object per safe. SSH accounts for baselines are separate objects. <code>PLAT-DHCP</code> holds the identity that creates and deletes reservations, split by scope so non-production cannot write a production reservation.</li>
       <li>Create an application identity per agent role: <code>tfc-apply-nonprod</code>, <code>tfc-apply-prod</code>, <code>tfc-ingress</code>, <code>aap-exec-nonprod</code>, <code>aap-exec-prod</code>.</li>
       <li>Authenticate with a certificate, not a password in a script argument. The certificate lives on that host, mode 0600, and in the safe.</li>
       <li>CCP AIM allowlist: the apply identity can read the vCenter object for its environment and cannot read the SSH objects. The execution identity is the reverse. The ingress identity can read only the GitHub publisher credential if it needs one.</li>
@@ -1142,7 +1150,7 @@ manager: "sam@example.internal"</code></pre>
       <li>Bind the non-production CyberArk account to that role on the non-production objects only.</li>
       <li>Publish the first module version, even if the portal does not exist yet. Inputs: template, folder, cluster, datastore, port group, CPU, memory, hostname. Provider block empty.</li>
       <li>Drive one workspace by hand, or with the API from a platform laptop using a personal token that you then revoke. Hostname in the sandbox pattern. Custom attributes include a fake <code>request_id</code>.</li>
-      <li>Confirm the guest boots and gets a DHCP address.</li>
+      <li>Create the VM powered off, reserve its MAC in a sandbox DHCP scope, power it on, and confirm the guest address equals the reservation. Then delete the DNS test record and release the reservation as part of the destroy.</li>
     </ol>
     <p>Verify: the VM exists only in the sandbox folder. A plan that targets a production folder with the non-production account fails at vCenter, not only in policy. Destroy the VM with a destroy plan before you continue. State in HCP matches vCenter.</p>
   </details>
@@ -1185,7 +1193,7 @@ manager: "sam@example.internal"</code></pre>
   <details class="phase">
     <summary>C15. Baseline and content distribution</summary>
     <ol>
-      <li>Roles: Arc enrollment, Entra SSH extension, time, Splunk forwarder, estate baseline, <code>/etc/infra-id</code>. DNS waits on question 6. Keep them in GitHub Enterprise. The AAP project may point at that repository because the allowlist lets the controller clone it.</li>
+      <li>Jobs: <code>reserve-address</code> before power-on, and the baseline after boot. The baseline writes A and PTR, then Arc enrollment, Entra SSH, time, the Splunk forwarder, and <code>/etc/infra-id</code>. Keep them in GitHub Enterprise. The AAP project may point at that repository because the allowlist lets the controller clone it.</li>
       <li>Pin the project or the collection version on the job template. Do not track a moving branch.</li>
       <li>Workflow template <code>baseline-linux-np</code> and <code>baseline-linux-pr</code>. Each is locked to its instance group and its credential.</li>
       <li>Launch by hand against the sandbox VM. Then launch again and confirm the playbook is safe to run twice. The portal will retry it.</li>
@@ -1667,12 +1675,12 @@ splunk:
       <tr><td>HCP Europe is not a London region</td><td>There is no UK datacentre choice in the product. Some account and support data is processed in the US. Several integrations, including the ServiceNow one and the Kubernetes operator, are absent. Teams do not exist.</td><td>Europe organisation, group tokens, ServiceNow via its own API, portal on your cluster without the HashiCorp operator. Confirm the gaps in the sales contract.</td></tr>
       <tr><td>Managers need GitHub seats</td><td>Approval is a pull request review. A manager without a linked GitHub account blocks every request from their reports.</td><td>Portal fails closed when the manager cannot be requested as a reviewer. Budget the seats.</td></tr>
       <tr><td>Arc role-assignment quota</td><td>Per-machine Entra login assignments can exhaust the subscription quota well before 3,000 servers.</td><td>One group per service, raise the Azure quota early, resource groups per environment rather than per machine.</td></tr>
-      <tr><td>IP source still unnamed</td><td>ServiceNow will store the wrong address if DHCP leases move.</td><td>Question 6 is a gate. No allocator is built until you name the system.</td></tr>
+      <tr><td>DHCP reservation API</td><td>6A depends on the current DHCP service accepting a reservation for a MAC before the guest boots. A floating lease will be reused. A service with no API cannot be driven by the execution node.</td><td>Reservation before power-on. Release on abandon and on destroy. Ask the network team for the product and the management endpoint before the first real clone.</td></tr>
       <tr><td>Showcase over-claims</td><td>A polished Azure demo can be mistaken for a vCenter and AAP deployment.</td><td>The claims table and the spoken sentence in D9. Separate organisations.</td></tr>
       <tr><td>Managed resource cost</td><td>Server count is not the bill. Resource addresses are.</td><td>Measure one plan. The list-price illustration in the estate section is not a quote.</td></tr>
       <tr><td>Free-tier policy wording</td><td>The overview both includes policy on Free and dashes it out in the comparison table. A note then says one set of five policies.</td><td>Showcase tries the five. Portal quota exists either way.</td></tr>
       <tr><td>SSO lockout</td><td>Requiring SSO before break-glass is tested strands the organisation.</td><td>C4 before any “required” switch. Annual test.</td></tr>
-      <tr><td>Image and IPAM unknowns</td><td>DHCP and an existing template process are assumptions. A production network that requires static reservations changes the module.</td><td>Questions 6 and 14. The catalogue item has a slot for the address source.</td></tr>
+      <tr><td>DNS is a second system</td><td>The reservation can succeed and the A record can still fail, or point at the wrong address.</td><td>ServiceNow is written only when the guest, the reservation, and DNS match. A mismatch stays in <code>address_failed</code>.</td></tr>
       <tr><td>OpenShift and Azure landing zones</td><td>Designing them now in detail would fake requirements you said are later.</td><td>Reserved projects and a written rule: new catalogue item, new module, new pool only if the API is private.</td></tr>
     </tbody>
   </table>
